@@ -1,0 +1,429 @@
+---
+title: "Templates for All Maps and Graphs + Descriptive Statistics"
+description: "This document is meant to act as the location where all final version graphs are meant to be created, and all descriptive statistics put onto those graphs will be calcualted. This synthesizes material from other documents up to this point. "
+author: "Sam Lance"
+format:
+  html:
+    code-fold: true
+    toc: true
+    number-sections: true
+    embed-resources: true
+    theme: Lux
+editor: visual
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r, include =FALSE}
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(here)
+library(ggplot2)
+library(stringr)
+library(purrr)
+library(maps)
+library(knitr)
+library(kableExtra)
+library(sf)
+library(RColorBrewer)
+library(patchwork)
+library(tmap)
+library(viridis)
+library(sp)
+library(rworldmap)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(scales)
+```
+
+## Reading In + Cleaning Data
+
+### Reading in Data
+
+```{r, output=FALSE}}
+
+join_sed = read_csv(here("data","sediment_zscore.csv")) |>
+  drop_na()
+
+```
+
+### Cleaning Data
+
+```{r}
+
+#Convert DF to SF Object 
+sf_sed <- st_as_sf(join_sed, 
+                           coords = c("site_lon", "site_lat"), #locate long and lat in df
+                           crs = 4326,
+                       remove = FALSE) #setting coordinate reference system WGS84
+
+#Load Data from Natural Earth 
+world <- ne_countries(scale = "medium", returnclass = "sf") |> #turn into SF object 
+  select(name, continent, geometry)   # keep only country name + continent
+
+#Spatial Join
+#Assigning every point a continent based on location
+continent_joined <- st_join(sf_sed, world, join = st_within)
+
+#If nothing within then go with the nearest continent 
+miss_idx <- which(is.na(continent_joined$continent))
+if (length(miss_idx) > 0) {
+  nearest_row_in_world <- st_nearest_feature(continent_joined[miss_idx, ], world)
+  continent_joined$continent[miss_idx] <- world$continent[nearest_row_in_world]
+  continent_joined$name[miss_idx]      <- world$name[nearest_row_in_world]
+}
+
+#Final Renaming and Creating New DF 
+sf_sed <- continent_joined %>%
+  st_drop_geometry() %>%
+  rename(country = name)
+
+```
+
+## Figure 3 Maps
+
+### Establishing Baseline
+
+```{r}
+#Loading in World Map Data
+world_map <- ne_countries(scale = "medium", returnclass = "sf")
+```
+
+### World Map
+
+```{r}
+#Set Map Extents
+xmin <- -170
+xmax <- 170
+
+#Find Standard Deviation for the Dataset
+#Purpose: use for the scale to condense and make a little easier to visualize 
+std_dev_sed <- sd(join_sed$p95_zscore, na.rm = TRUE)
+
+world_map <- ne_countries(
+  scale = "medium", returnclass = "sf") |>
+  filter(continent != "Antarctica")
+
+world_map_plot <- ggplot() +
+  geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
+  geom_point(
+    data = join_sed,
+    aes(x = site_lon, y = site_lat, color = p95_zscore),
+    size = 3,
+    alpha = 0.85,
+    shape = 16
+  ) +
+  scale_color_distiller(
+    name = "SSC Z-Score",
+    palette = "Spectral",
+    limits = c(-std_dev_sed, std_dev_sed),
+    oob = scales::squish
+  ) +
+  coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
+
+  theme_void(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+
+    # Legend placement and sizing
+    legend.position = "top",
+    legend.justification = "center",
+    legend.box = "vertical",
+
+    # Text sizing
+    legend.title = element_text(face = "bold", size = 20),
+    legend.text  = element_text(size = 20),
+
+    # Spacing
+    legend.margin = margin(t = 12, b = 12),
+    legend.spacing.x = unit(1.5, "cm"),
+
+    # Give the plot a bit more breathing room
+    plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
+  ) +
+  guides(
+    color = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth  = unit(0.4, "npc"),   # spans most of plot width
+      barheight = unit(0.4, "cm"),
+      direction = "horizontal"
+    )
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots", "world_ssc_fig3.png"),
+  plot = world_map_plot,
+  width = 16,
+  height = 8,
+  units = "in",
+  dpi = 300
+)
+```
+
+## Figure 4 Boxplots
+
+### Boxplots of Z-Scores by Type
+
+```{r}
+
+#Establishing Title
+title <- "Z-Score of Peak SSC for Avulsion Year and Year Prior by Avulsion Type"
+
+#Computing T-Tests
+fan = join_sed |>
+  filter(av_type == "fan")
+
+delta = join_sed |>
+  filter(av_type == "delta")
+
+il = join_sed |>
+  filter(av_type == "intra-lobe")
+
+retro = join_sed |>
+  filter(av_type == "retrogradational")
+
+
+t_fan = t.test(fan$p95_zscore, mu = 0)
+t_delta = t.test(delta$p95_zscore, mu = 0)
+t_il = t.test(il$p95_zscore, mu = 0)
+t_retro = t.test(retro$p95_zscore, mu = 0)
+t_all = t.test(join_sed$p95_zscore, mu = 0)
+
+print(t_all)
+
+#Setting Up Plot Base
+gardner_type <- join_sed |>
+  ggplot(aes(x = av_type, y = p95_zscore, fill = av_type)) +
+  geom_jitter(width = 0.2, alpha = 0.7, size = 2, color = "gray30") +
+  geom_boxplot(show.legend = FALSE, alpha = 0.5) +
+  stat_summary(fun = mean, 
+               geom = "crossbar", 
+               width = 0.5, 
+               color = scales::alpha("red", 0.50)) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  labs(title = str_wrap(title, width = 40), 
+       x = "Avulsion Type", y = "SSC Z-Score (-)") +
+  theme_classic(base_size = 18) +
+  scale_fill_brewer(palette = "Greys") +  
+  theme(
+    plot.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(face = "bold"),
+    axis.text.x = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+print(gardner_type)
+
+ggsave(
+  filename = here("plots", "ssc_zscore_type_box.jpg"), 
+  plot = gardner_type, 
+  device = "jpg",
+  height = 8, width = 7, units = "in"
+)
+
+```
+
+### Boxplots of Z-Scores by Region
+
+```{r}
+
+#Establishing Title
+title <- "Z-Score of Peak SSC for Avulsion Year and Year Prior by Site Area"
+
+#Setting Up Plot Base
+gardner_area <- join_sed |>
+  ggplot(aes(x = continent, y = p95_zscore, fill = continent)) +
+  geom_jitter(width = 0.2, alpha = 0.7, size = 2, color = "gray30") +
+  geom_boxplot(show.legend = FALSE, alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  labs(title = str_wrap(title, width = 40), 
+       x = "Site Area", y = "Z-Score (-)") +
+  scale_x_discrete(labels = label_wrap(width = 10)) +
+  theme_minimal(base_size = 18) +
+  scale_fill_brewer(palette = "RdPu") +  
+  theme(
+    plot.title = element_text(size = 22, face = "bold"),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(face = "bold"),
+    axis.text.x = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+print(gardner_area)
+
+ggsave(
+  filename = here("plots", "ssc_zscore_continent_box.jpg"), 
+  plot = gardner_area, 
+  device = "jpg",
+  height = 10, width = 7, units = "in"
+)
+
+```
+
+### Overall Boxplots
+
+```{r}
+
+ssc_overall <- join_sed |>
+  ggplot(aes(x = "", y = p95_zscore)) +
+
+  # raw data
+  geom_jitter(
+    width = 0.15,
+    alpha = 0.6,
+    size = 2,
+    color = "gray30"
+  ) +
+
+  # boxplot
+  geom_boxplot(
+    width = 0.35,
+    fill = "grey70",
+    alpha = 0.6,
+    outlier.shape = NA
+  ) +
+
+  # zero reference
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "gray30",
+    linewidth = 1.2
+  ) +
+
+  # mean (solid red line)
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.35,
+    color = scales::alpha("red", 0.50),
+    linewidth = 0.5
+  ) +
+
+  labs(
+    x = NULL,
+    y = "SSC Z-Score (-)"
+  ) +
+
+  theme_classic(base_size = 18) +
+  theme(
+    axis.text.x  = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_text(face = "bold"),
+    panel.background = element_rect(fill = "transparent", colour = NA), # Transparent panel bg
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    axis.text.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+  )
+
+ssc_overall
+
+ggsave(
+  filename = here("plots", "ssc_overall_box.png"), 
+  bg = "transparent",
+  plot = ssc_overall, 
+  device = "png",
+  height = 4, width = 4, units = "in"
+)
+
+```
+
+## Making Mock Time Series
+
+```{r}
+
+set.seed(123)
+
+# ---- Create daily time series ----
+years <- 1985:2020
+days_per_year <- 365
+
+df <- expand.grid(
+  year = years,
+  day = 1:days_per_year
+) %>%
+  mutate(
+    # decimal year (numeric x-axis)
+    x_year = year + (day - 1) / days_per_year,
+
+    # baseline low flow
+    baseflow = rgamma(n(), shape = 1.2, scale = 120),
+
+    # flood season probability (mid-year peak)
+    flood_prob = dnorm(day, mean = 200, sd = 35),
+    flood_prob = flood_prob / max(flood_prob),
+
+    # random flood occurrence
+    flood_event = rbinom(n(), 1, prob = 0.04 * flood_prob),
+
+    # flood magnitude (heavy-tailed)
+    flood_mag = flood_event * rgamma(n(), shape = 2.5, scale = 2200),
+
+    discharge = baseflow + flood_mag
+  )
+
+avulsion_year <- 2004
+
+mean_p95 <- quantile(df$discharge, probs = 0.95)
+
+
+p <- ggplot(df, aes(x = x_year, y = discharge)) +
+
+  # Avulsion year & prior shading
+  annotate(
+    "rect",
+    xmin = avulsion_year - 1,
+    xmax = avulsion_year,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "yellow",
+    alpha = 0.3
+  ) +
+
+  # Discharge time series
+  geom_line(color = "#3b73a1", linewidth = 0.5) +
+
+  # Mean 95th percentile line
+  geom_hline(
+    yintercept = mean_p95,
+    linetype = "dashed",
+    color = "grey40"
+  ) +
+
+  scale_x_continuous(
+    limits = c(1985, 2020),
+    breaks = seq(1985, 2020, by = 5)
+  ) +
+
+  labs(
+    title = "C",
+    x = "Year",
+    y = expression("Discharge (m"^3*"/s)")
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18, hjust = 0),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(
+      linetype = "dashed",
+      linewidth = 0.4
+    )
+  )
+
+print(p)
+
+
+```

@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Large data file (not tracked)
+data/discharge_time_series.csv
+
+# Large generated outputs
+/data/discharge_time_series.csv
+
+/data/

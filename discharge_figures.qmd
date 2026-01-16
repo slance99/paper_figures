@@ -1,0 +1,1066 @@
+---
+title: "Templates for All Maps and Graphs + Descriptive Statistics"
+description: "This document is meant to act as the location where all final version graphs are meant to be created, and all descriptive statistics put onto those graphs will be calcualted. This synthesizes material from other documents up to this point. "
+author: "Sam Lance"
+format:
+  html:
+    code-fold: true
+    toc: true
+    number-sections: true
+    embed-resources: true
+    theme: Lux
+editor: visual
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r, include =FALSE}
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(here)
+library(ggplot2)
+library(stringr)
+library(purrr)
+library(maps)
+library(knitr)
+library(kableExtra)
+library(sf)
+library(RColorBrewer)
+library(patchwork)
+library(tmap)
+library(viridis)
+library(sp)
+library(rworldmap)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(scales)
+```
+
+## Reading In + Cleaning Data
+
+### Reading in Data
+
+```{r, output=FALSE}}
+
+join_dis <- read_csv(here("data","discharge_zscore.csv")) |>
+  inner_join(
+    read_csv(here("data","all_site_data_102825.csv")) |>
+      select(site_name, site_lat, site_lon),   # no av_type
+    by = "site_name") |>
+  drop_na()
+
+```
+
+### Cleaning Data
+
+```{r}
+#Convert DF to SF Object 
+sf_dis <- st_as_sf(join_dis, 
+                           coords = c("site_lon", "site_lat"), #locate long and lat in df
+                           crs = 4326,
+                       remove = FALSE) #setting coordinate reference system WGS84
+
+#Load Data from Natural Earth 
+world <- ne_countries(scale = "medium", returnclass = "sf") |> #turn into SF object 
+  select(name, continent, geometry)   # keep only country name + continent
+
+#Spatial Join
+#Assigning every point a continent based on location
+continent_joined <- st_join(sf_dis, world, join = st_within)
+
+#If nothing within then go with the nearest continent 
+miss_idx <- which(is.na(continent_joined$continent))
+if (length(miss_idx) > 0) {
+  nearest_row_in_world <- st_nearest_feature(continent_joined[miss_idx, ], world)
+  continent_joined$continent[miss_idx] <- world$continent[nearest_row_in_world]
+  continent_joined$name[miss_idx]      <- world$name[nearest_row_in_world]
+}
+
+#Final Renaming and Creating New DF 
+sf_dis <- continent_joined %>%
+  st_drop_geometry() %>%
+  rename(country = name)
+
+```
+
+## Figure 1 - Inset Maps for Selected Sites
+
+### Establishing Colors and Shapes for All Maps
+
+```{r}
+#Loading in World Map Data
+world_map <- ne_countries(scale = "medium", returnclass = "sf") |>
+  dplyr::filter(continent != "Antarctica")
+
+#Establish Legend Breaks, Colors, and Desired Shapes
+colors <- brewer.pal(4, "Spectral")
+rev_colors <- rev(colors)
+shapes <- c(21, 22, 23, 24)   # filled shapes
+# breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
+# colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
+# rev_colors <- rev(colors)  # Reverse the color order
+# shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
+
+```
+
+### World Map
+
+```{r}
+
+selected_sites <- sf_dis |>
+  filter(site_name %in% c("B9", "R28.1", "JA.25.India.1990", "JAVA12.1985"))
+
+# Make sure av_type is a factor and levels are consistent
+sf_dis$av_type <- factor(sf_dis$av_type)
+
+# Create a named color vector for av_type
+av_type_colors <- setNames(rev_colors, levels(sf_dis$av_type))
+
+world_map_plot <- world_map |>
+  ggplot() +
+  geom_sf(fill = "grey80", color = "grey80") +
+  
+  # All sites: filled by av_type, NO outline (color = NA)
+  geom_point(
+    data = sf_dis,
+    aes(
+      x = site_lon,
+      y = site_lat,
+      fill = av_type,
+      shape = av_type,
+      color = av_type
+    ),
+    size = 2,
+    alpha = 0.7           # no outline
+  ) +
+  
+  # Selected sites: same fill, but yellow outline
+  geom_point(
+    data = selected_sites,
+    aes(
+      x = site_lon,
+      y = site_lat,
+      fill = av_type,
+      shape = av_type
+    ),
+    size = 2,
+    alpha = 0.7,
+    stroke = 1,
+    color = "yellow",     # yellow outline only for selected sites
+    show.legend = FALSE   # <<< this removes yellow outlines from legend
+  ) +
+   scale_color_manual(
+    name = "Avulsion Type",
+    values = av_type_colors
+  ) +
+  scale_fill_manual(
+    name = "Avulsion Type",
+    values = av_type_colors
+  ) +
+  scale_shape_manual(
+    name = "Avulsion Type",
+    values = shapes
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 24, face = "bold"),
+    
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    
+    legend.position = c(0.2, 0.25),
+    legend.direction = "vertical",
+    legend.box = "vertical",
+    legend.title = element_text(face = "bold"),
+    legend.title.align = 0.5,
+    legend.spacing.y = unit(-0.1, "cm"),
+    legend.key.height = unit(0.3, "lines"),
+    legend.background = element_rect(fill = "white", color = "white")
+  ) +
+  guides(
+    fill  = guide_legend(byrow = TRUE),
+    shape = guide_legend(byrow = TRUE)
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots", "fig1_world.png"),
+  plot = world_map_plot,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+
+```
+
+### Pacific Islands
+
+```{r}
+
+pacific <- world_map %>%
+  filter(name %in% c("Timor-Leste", "Indonesia", "Papua New Guinea"))
+
+pacific_av <- sf_dis |>
+  filter(country %in% c("Timor-Leste", "Indonesia", "Papua New Guinea"))
+
+selected_sites <- sf_dis |>
+  filter(site_name %in% c("R3.2"))
+
+# Make sure av_type is a factor and levels are consistent
+
+pacific_av$av_type <- factor(pacific_av$av_type)
+
+# Create a named color vector for av_type
+av_type_colors <- setNames(rev_colors, levels(pacific_av$av_type))
+
+# Make sure both layers are in the same CRS (assumes world_map is lon/lat WGS84)
+pacific_sf <- st_transform(pacific, 4326)
+
+bb <- st_bbox(pacific_sf)
+
+# padding in degrees (tweak as needed)
+pad_x <- 2
+pad_y <- 2
+
+pacific_plot <- pacific_sf |>
+  ggplot() +
+  geom_sf(fill = "white", color = "white") +
+  geom_point(
+    data = pacific_av,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type, color = av_type),
+    size = 5, alpha = 0.7, show.legend = FALSE 
+  ) +
+  geom_point(
+    data = selected_sites,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type),
+    size = 4, stroke = 1.5, color = "yellow", show.legend = FALSE
+  ) +
+  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_shape_manual(name = "Avulsion Type", values = shapes) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 24, face = "bold"),
+    axis.title = element_blank(),
+    axis.text  = element_blank(),
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "transparent", colour = NA), # Transparent panel background
+    plot.background = element_rect(fill = "transparent", colour = NA)  # Transparent plot background
+    # legend.position = c(0.2, 0.25),
+    # legend.direction = "vertical",
+    # legend.box = "vertical",
+    # legend.title = element_text(face = "bold"),
+    # legend.title.align = 0.5,
+    # legend.spacing.y = unit(-0.1, "cm"),
+    # legend.key.height = unit(0.3, "lines"),
+    # legend.background = element_rect(fill = "white", color = "white")
+  ) +
+  coord_sf(
+    xlim = c(bb["xmin"] - pad_x, bb["xmax"] + pad_x),
+    ylim = c(bb["ymin"] - pad_y, bb["ymax"] + pad_y),
+    expand = FALSE
+  ) 
+  # guides(
+  #   fill  = guide_legend(byrow = TRUE),
+  #   shape = guide_legend(byrow = TRUE)
+  # )
+
+pacific_plot
+
+ggsave(
+  filename = here("plots", "pacific_fig1.png"),
+  plot = pacific_plot,
+  width = 10, height = 7, units = "in", dpi = 300
+)
+
+```
+
+### South America
+
+```{r}
+south_america_countries <- c(
+  "Argentina", "Bolivia", "Brazil", "Chile", "Colombia", "Ecuador",
+  "Guyana", "Paraguay", "Peru", "Suriname", "Uruguay", "Venezuela",
+  "French Guiana"
+)
+
+sa_map <- world_map %>%
+  filter(name %in% south_america_countries)
+
+sa_av <- sf_dis %>%
+  filter(country %in% south_america_countries)
+
+selected_sites <- sf_dis %>%
+  filter(site_name %in% c("B9.a"))
+
+# Make sure av_type is a factor and levels are consistent
+sa_av$av_type <- factor(sa_av$av_type)
+
+# Create a named color vector for av_type
+av_type_colors <- setNames(rev_colors, levels(sa_av$av_type))
+
+# Make sure both layers are in the same CRS (assumes world_map is lon/lat WGS84)
+sa_sf <- st_transform(sa_map, 4326)
+
+bb <- st_bbox(sa_sf)
+
+# padding in degrees (tweak as needed)
+pad_x <- 2
+pad_y <- 2
+
+sa_plot <- sa_sf |>
+  ggplot() +
+  geom_sf(fill = "white", color = "white") +
+  geom_point(
+    data = sa_av,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type, color = av_type),
+    size = 5, alpha = 0.7, show.legend = FALSE
+  ) +
+  geom_point(
+    data = selected_sites,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type),
+    size = 4, stroke = 1.5, color = "yellow", show.legend = FALSE
+  ) +
+  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_shape_manual(name = "Avulsion Type", values = shapes) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 24, face = "bold"),
+    axis.title = element_blank(),
+    axis.text  = element_blank(),
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "transparent", colour = NA), # Transparent panel background
+    plot.background = element_rect(fill = "transparent", colour = NA)  # Transparent plot background
+  ) +
+  coord_sf(
+    xlim = c(bb["xmin"] - pad_x, bb["xmax"] + pad_x),
+    ylim = c(bb["ymin"] - pad_y, bb["ymax"] + pad_y),
+    expand = FALSE
+  )
+
+sa_plot
+
+ggsave(
+  filename = here("plots", "south_america_fig1.png"),
+  plot = sa_plot,
+  width = 10, height = 7, units = "in", dpi = 300
+)
+
+
+
+```
+
+### Madagascar
+
+```{r}
+madagascar_names <- c("Madagascar")
+
+mg_map <- world_map %>%
+  filter(name %in% madagascar_names)
+
+mg_av <- sf_dis %>%
+  filter(country %in% madagascar_names)
+
+selected_sites <- sf_dis %>%
+  filter(site_name %in% c("MANAMBOLO.2004"))  # change if your Madagascar site differs
+
+# Ensure av_type factor + consistent levels
+mg_av$av_type <- factor(mg_av$av_type)
+
+av_type_colors <- setNames(rev_colors, levels(mg_av$av_type))
+
+# CRS + bbox for zoom
+mg_sf <- st_transform(mg_map, 4326)
+bb <- st_bbox(mg_sf)
+
+pad_x <- 1
+pad_y <- 1
+
+mg_plot <- mg_sf |>
+  ggplot() +
+  geom_sf(fill = "white", color = "white") +
+  geom_point(
+    data = mg_av,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type, color = av_type),
+    size = 5, alpha = 0.7, show.legend = FALSE
+  ) +
+  geom_point(
+    data = selected_sites,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type),
+    size = 4, stroke = 1.5, color = "yellow", show.legend = FALSE
+  ) +
+  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_shape_manual(name = "Avulsion Type", values = shapes) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 24, face = "bold"),
+    axis.title = element_blank(),
+    axis.text  = element_blank(),
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "transparent", colour = NA), # Transparent panel background
+    plot.background = element_rect(fill = "transparent", colour = NA)  # Transparent plot background
+  ) +
+  coord_sf(
+    xlim = c(bb["xmin"] - pad_x, bb["xmax"] + pad_x),
+    ylim = c(bb["ymin"] - pad_y, bb["ymax"] + pad_y),
+    expand = FALSE
+  )
+
+mg_plot
+
+ggsave(
+  filename = here("plots", "madagascar_fig1.png"),
+  plot = mg_plot,
+  width = 10, height = 7, units = "in", dpi = 300
+)
+
+
+```
+
+### India Nepal
+
+```{r}
+india_nepal <- c("India", "Nepal")
+
+in_np_map <- world_map %>%
+  filter(name %in% india_nepal)
+
+in_np_av <- sf_dis %>%
+  filter(country %in% india_nepal)
+
+selected_sites <- sf_dis %>%
+  filter(site_name %in% c("JA.8.India.2004.2004"))  # change if your selected site differs
+
+# Ensure av_type factor + consistent levels
+in_np_av$av_type <- factor(in_np_av$av_type)
+av_type_colors <- setNames(rev_colors, levels(in_np_av$av_type))
+
+# CRS + bbox for zoom
+in_np_sf <- st_transform(in_np_map, 4326)
+bb <- st_bbox(in_np_sf)
+
+pad_x <- 2
+pad_y <- 2
+
+in_np_plot <- in_np_sf |>
+  ggplot() +
+  geom_sf(fill = "white", color = "white") +
+  geom_point(
+    data = in_np_av,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type, color = av_type),
+    size = 5, alpha = 0.7, show.legend = FALSE
+  ) +
+  geom_point(
+    data = selected_sites,
+    aes(x = site_lon, y = site_lat, fill = av_type, shape = av_type),
+    size = 4, stroke = 1.5, color = "yellow", show.legend = FALSE
+  ) +
+  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_shape_manual(name = "Avulsion Type", values = shapes) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 24, face = "bold"),
+    axis.title = element_blank(),
+    axis.text  = element_blank(),
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "transparent", colour = NA), # Transparent panel background
+    plot.background = element_rect(fill = "transparent", colour = NA)  # Transparent plot background
+  ) +
+  coord_sf(
+    xlim = c(bb["xmin"] - pad_x, bb["xmax"] + pad_x),
+    ylim = c(bb["ymin"] - pad_y, bb["ymax"] + pad_y),
+    expand = FALSE
+  )
+
+in_np_plot
+
+ggsave(
+  filename = here("plots", "india_nepal_fig1.png"),
+  plot = in_np_plot,
+  width = 10, height = 7, units = "in", dpi = 300
+)
+
+
+```
+
+## Figure 3 - Map of Discharge Z-Score
+
+### Establishing Baseline
+
+```{r}
+#Loading in World Map Data
+world_map <- ne_countries(scale = "medium", returnclass = "sf")
+
+#Establish Legend Breaks, Colors, and Desired Shapes
+breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
+colors <- brewer.pal(length(breaks) - 1, "PiYG")
+rev_colors <- rev(colors)  # Reverse the color order
+shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
+sf_dis <- sf_dis |>
+  mutate(zscore_category = cut(p95_zscore, breaks = breaks, include.lowest = TRUE))
+
+```
+
+### South America
+
+```{r}
+south_america <- world_map |>
+  filter(continent == "South America")
+
+south_america_av <- sf_dis|>
+  filter(continent == "South America")   # only if av also has continent
+
+south_america_map <- south_america %>%
+  ggplot() +
+  geom_sf(fill = "grey35", color = "white") +
+  geom_point(
+    data = south_america_av,
+    aes(x = site_lon, y = site_lat, fill = zscore_category),
+    shape = 21,
+    color = "black",
+    size = 5
+  ) +
+  scale_fill_manual(
+    name = "Discharge Z-Score",
+    values = rev_colors,
+    drop = FALSE,
+    guide = guide_legend(order = 1, title.position = "top")
+  ) +
+  theme_minimal(base_size = 14) +
+  labs(title = "South America") +
+  theme(
+    plot.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "none",
+    legend.justification = c(0, 0.5),
+    legend.background = element_rect(fill = "white", color = "white"),
+    legend.title.align = 0.5,
+    legend.text.size = 10,
+    legend.title.size = 12) +
+  coord_sf(
+    xlim = range(south_america_av$site_lon, na.rm = TRUE) + c(-10, 40),
+    ylim = range(south_america_av$site_lat, na.rm = TRUE) + c(-40, 10),
+    expand = FALSE
+  )
+
+south_america_map
+
+ggsave(
+  filename = here("plots", "dis_south_america.png"),
+  plot = south_america_map,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+
+```
+
+### Oceania
+
+```{r}
+
+pacific <- world_map %>%
+  filter(name %in% c("Papua New Guinea", "Timor Leste", " Philippines", "Indonesia"))
+
+pacific_av <- av |>
+  filter(country %in% c("Papua New Guinea", "Timor Leste", " Philippines", "Indonesia"))
+
+pacific_map <- pacific |>
+  ggplot() +
+  geom_sf(fill = "grey35", color = "white") +
+  geom_point(data = pacific_av, 
+             aes(x = site_lon, 
+                 y = site_lat, 
+                 fill = zscore_category), 
+             size = 7,
+             shape = 21,
+             color = "black") +
+  scale_fill_manual(name = "Discharge Z-Score", 
+                     values = rev_colors, 
+                     drop = FALSE,
+                     guide = guide_legend(order = 1, title.position = "top")) +
+  theme_minimal(base_size = 14) +
+  labs(title = "Oceania") +
+  theme(
+    plot.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "none") +
+  coord_sf(xlim = range(pacific_av$site_lon) + c(-10, 5),
+           ylim = range(pacific_av$site_lat) + c(-10, 5), 
+           expand = FALSE)
+pacific_map
+
+ggsave(
+      filename = here("plots", "dis_oceania.png"),
+      plot = pacific_map,
+      width = 10,
+      height = 7,
+      units = "in", # or "cm", "mm", "px"
+      dpi = 300 # Adjust resolution as needed
+    )
+
+```
+
+### Madagascar
+
+```{r}
+
+madagascar <- world_map %>%
+  filter(name == "Madagascar")
+
+madagascar_av <- av |>
+  filter(country %in% c("Madagascar"))
+
+madagascar_map <- madagascar |>
+  ggplot() +
+  geom_sf(fill = "grey35", color = "white") +
+  geom_point(data = madagascar_av, 
+             aes(x = site_lon, 
+                 y = site_lat, 
+                 fill = zscore_category), 
+             size = 7,
+             color = "black",
+             shape = 21) +
+  scale_fill_manual(name = "Discharge Z-Score", 
+                     values = rev_colors, 
+                     drop = FALSE) +
+  theme_minimal(base_size = 18) +
+  labs(title = "Madagascar") +
+  theme(
+    plot.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "none",
+    legend.background = element_rect(fill = "white", color = "white")) +
+  coord_sf(xlim = range(madagascar_av$site_lon) + c(-5, 12),
+           ylim = range(madagascar_av$site_lat) + c(-5, 5), 
+           expand = FALSE)
+madagascar_map
+
+ggsave(
+      filename = here("plots", "dis_madagascar.png"),
+      plot = madagascar_map,
+      width = 10,
+      height = 7,
+      units = "in", # or "cm", "mm", "px"
+      dpi = 300 # Adjust resolution as needed
+    )
+
+```
+
+### Himalaya
+
+```{r}
+
+himalaya <- world_map %>%
+  filter(name %in% c("India", "Nepal", "Bhutan", "Bangladesh", "Myanmar"))
+
+himalaya_av <- av |>
+  filter(country %in% c("India", "Nepal", "Bhutan", "Bangladesh", "Myanmar"))
+
+himalaya_map <- himalaya |>
+  ggplot() +
+  geom_sf(fill = "gray35", color = "white") +
+  geom_point(data = himalaya_av, 
+             aes(x = site_lon, 
+                 y = site_lat, 
+                 fill = zscore_category), 
+             size = 7,
+             shape = 21,
+             color = "black") +
+  scale_fill_manual(name = "Discharge Z-Score", 
+                     values = rev_colors, drop = FALSE) +
+  theme_minimal(base_size = 14) +
+  labs(title = "Himalaya Region") +
+  theme(
+    plot.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "none",
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    legend.title.align = 0.5,
+    legend.background = element_rect(fill = "white", color = "white")) +
+  coord_sf(xlim = range(himalaya_av$site_lon) + c(-15, 15),
+           ylim = range(himalaya_av$site_lat) + c(-20, 5), 
+           expand = FALSE)
+himalaya_map
+
+ggsave(
+      filename = here("plots", "dis_himalaya.png"),
+      plot = himalaya_map,
+      width = 10,
+      height = 7,
+      units = "in", # or "cm", "mm", "px"
+      dpi = 300 # Adjust resolution as needed
+    )
+```
+
+### World Map for Legend
+
+```{r}
+#Set Up Map Extent
+xmin <- -170
+xmax <- 170
+
+#Find Standard Deviation for the Dataset
+#Purpose: use for the scale to condense and make a little easier to visualize 
+std_dev_dis <- sd(join_dis$p95_zscore, na.rm = TRUE)
+
+world_map <- ne_countries(scale = "medium", returnclass = "sf") |>
+  filter(continent != "Antarctica")
+
+world_map_plot <- ggplot() +
+  geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
+  geom_point(
+    data = join_dis,
+    aes(x = site_lon, y = site_lat, color = p95_zscore),
+    size = 3,
+    alpha = 0.85,
+    shape = 16
+  ) +
+  scale_color_distiller(
+    name = "Discharge Z-Score",
+    palette = "Spectral",
+    limits = c(-0.8, 0.8),
+    oob = scales::squish
+  ) +
+  coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
+
+  theme_void(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+
+    # Legend placement and sizing
+    legend.position = "top",
+    legend.justification = "center",
+    legend.box = "vertical",
+
+    # Text sizing
+    legend.title = element_text(face = "bold", size = 20),
+    legend.text  = element_text(size = 20),
+
+    # Spacing
+    legend.margin = margin(t = 12, b = 12),
+    legend.spacing.x = unit(1.5, "cm"),
+
+    # Give the plot a bit more breathing room
+    plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
+  ) +
+  guides(
+    color = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth  = unit(0.4, "npc"),   # spans most of plot width
+      barheight = unit(0.4, "cm"),
+      direction = "horizontal"
+    )
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots", "world_dis_fig3.png"),
+  plot = world_map_plot,
+  width = 16,
+  height = 8,
+  units = "in",
+  dpi = 300
+)
+
+
+```
+
+## Figure 4 - Boxplots of Discharge Z-Score
+
+### Boxplots of Z-Scores by Type
+
+```{r}
+
+#Establishing Title
+title <- "Z-Score of Peak Discharge for Avulsion Year and Year Prior by Avulsion Type"
+
+#Computing T-Tests
+fan = join_dis |>
+  filter(av_type == "fan")
+
+delta = join_dis |>
+  filter(av_type == "delta")
+
+il = join_dis |>
+  filter(av_type == "intra-lobe")
+
+retro = join_dis |>
+  filter(av_type == "retrogradational")
+
+
+t_fan = t.test(fan$p95_zscore, mu = 0)
+t_delta = t.test(delta$p95_zscore, mu = 0)
+t_il = t.test(il$p95_zscore, mu = 0)
+t_retro = t.test(retro$p95_zscore, mu = 0)
+t_all = t.test(join_dis$p95_zscore, mu = 0)
+
+print(t_all)
+
+#Setting Up Plot Base
+gardner_type <- join_dis |>
+  ggplot(aes(x = av_type, y = p95_zscore, fill = av_type)) +
+  geom_jitter(width = 0.2, alpha = 0.7, size = 2, color = "gray30") +
+  geom_boxplot(show.legend = FALSE, alpha = 0.5) +
+  stat_summary(fun = mean, geom = "crossbar", width = 0.5, color = scales::alpha("red", 0.50)) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", width = 0.5) +
+  labs(
+       x = "Avulsion Type", y = "Discharge Z-Score (-)") +
+  theme_classic(base_size = 18) +
+  scale_fill_brewer(palette = "Greys") +  
+  theme(
+    plot.title = element_text(size = 22, face = "bold"),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(face = "bold"),
+    axis.text.x = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+print(gardner_type)
+
+ggsave(
+  filename = here("plots", "dis_zscore_type_box.jpg"), 
+  plot = gardner_type, 
+  device = "jpg",
+  height = 8, width = 7, units = "in"
+)
+
+```
+
+### Boxplots of Z-Scores by Region
+
+```{r}
+
+#Establishing Title
+title <- "Z-Score of Peak SSC for Avulsion Year and Year Prior by Site Area"
+
+#Setting Up Plot Base
+gardner_area <- av |>
+  ggplot(aes(x = continent, y = p95_zscore, fill = continent)) +
+  geom_jitter(width = 0.2, alpha = 0.7, size = 2, color = "gray30") +
+  geom_boxplot(show.legend = FALSE, alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  labs(title = str_wrap(title, width = 40), 
+       x = "Site Area", y = "Z-Score (-)") +
+  scale_x_discrete(labels = label_wrap(width = 10)) +
+  theme_minimal(base_size = 18) +
+  scale_fill_brewer(palette = "RdPu") +  
+  theme(
+    plot.title = element_text(size = 22, face = "bold"),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(face = "bold"),
+    axis.text.x = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+print(gardner_area)
+
+ggsave(
+  filename = here("plots", "dis_zscore_continent_box.jpg"), 
+  plot = gardner_area, 
+  device = "png",
+  height = 10, width = 7, units = "in"
+)
+
+```
+
+### Boxplot Overall
+
+```{r}
+
+#Create boxplot of all discharge 
+
+overall_dis <- join_dis |>
+  ggplot(aes(x = "", y = p95_zscore)) +
+
+  # raw data
+  geom_jitter(
+    width = 0.15,
+    alpha = 0.6,
+    size = 2,
+    color = "gray30"
+  ) +
+
+  # boxplot
+  geom_boxplot(
+    width = 0.35,
+    fill = "grey70",
+    alpha = 0.6,
+    outlier.shape = NA
+  ) +
+
+  # zero reference
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "grey30",
+    linewidth = 1.2
+  ) +
+
+  # mean (solid red line)
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.35,
+    color = scales::alpha("red", 0.50),
+    linewidth = 0.5
+  ) +
+
+  labs(
+    x = NULL,
+    y = "Discharge Z-Score (-)"
+  ) +
+
+  theme_classic(base_size = 18) +
+  theme(
+    axis.text.x  = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_text(face = "bold"),
+    panel.background = element_rect(fill = "transparent", colour = NA), # Transparent panel bg
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    axis.text.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+  )
+
+overall_dis
+
+ggsave(
+  filename = here("plots", "discharge_overall_box.png"), 
+  bg = "transparent",
+  plot = overall_dis, 
+  device = "png",
+  height = 4, width = 4, units = "in"
+)
+
+
+```
+
+## Making Mock Time Series
+
+```{r}
+
+set.seed(123)
+
+# ---- Create daily time series ----
+years <- 1985:2020
+days_per_year <- 365
+
+df <- expand.grid(
+  year = years,
+  day = 1:days_per_year
+) %>%
+  mutate(
+    # decimal year (numeric x-axis)
+    x_year = year + (day - 1) / days_per_year,
+
+    # baseline low flow
+    baseflow = rgamma(n(), shape = 1.2, scale = 120),
+
+    # flood season probability (mid-year peak)
+    flood_prob = dnorm(day, mean = 200, sd = 35),
+    flood_prob = flood_prob / max(flood_prob),
+
+    # random flood occurrence
+    flood_event = rbinom(n(), 1, prob = 0.04 * flood_prob),
+
+    # flood magnitude (heavy-tailed)
+    flood_mag = flood_event * rgamma(n(), shape = 2.5, scale = 2200),
+
+    discharge = baseflow + flood_mag
+  )
+
+avulsion_year <- 2004
+
+mean_p95 <- quantile(df$discharge, probs = 0.95)
+
+
+p <- ggplot(df, aes(x = x_year, y = discharge)) +
+
+  # Avulsion year & prior shading
+  annotate(
+    "rect",
+    xmin = avulsion_year - 1,
+    xmax = avulsion_year,
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "yellow",
+    alpha = 0.3
+  ) +
+
+  # Discharge time series
+  geom_line(color = "#3b73a1", linewidth = 0.5) +
+
+  # Mean 95th percentile line
+  geom_hline(
+    yintercept = mean_p95,
+    linetype = "dashed",
+    color = "grey40"
+  ) +
+
+  scale_x_continuous(
+    limits = c(1985, 2020),
+    breaks = seq(1985, 2020, by = 5)
+  ) +
+
+  labs(
+    title = "C",
+    x = "Year",
+    y = expression("Discharge (m"^3*"/s)")
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18, hjust = 0),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(
+      linetype = "dashed",
+      linewidth = 0.4
+    )
+  )
+
+print(p)
+
+
+```
