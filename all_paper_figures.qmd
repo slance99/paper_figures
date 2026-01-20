@@ -453,10 +453,10 @@ p_ssc <- ggplot(site_df, aes(x = date, y = y_pred)) +
     inherit.aes = FALSE,
     shape = 21,        # hollow circle
     size = 5,
-    stroke = 1.2,      # outline thickness
+    stroke = 2,      # outline thickness
     fill = NA,
     color = "red",
-    alpha = 0.5
+    alpha = 0.7
   )
 } +
 
@@ -512,7 +512,7 @@ ggsave(
   filename = file.path(plots_dir, paste0(safe_name, "_ssc_timeseries.png")),
   plot = p_ssc,
   width = 10,
-  height = 4,
+  height = 5,
   dpi = 300
 )
 
@@ -643,10 +643,10 @@ p_dis <- ggplot(site_df, aes(x = valid_time, y = dis24)) +
     inherit.aes = FALSE,
     shape = 21,        # hollow circle
     size = 5,
-    stroke = 1.2,      # outline thickness
+    stroke = 2,      # outline thickness
     fill = NA,
     color = "red",
-    alpha = 0.5
+    alpha = 0.7
   )
 } +
 
@@ -697,7 +697,7 @@ ggsave(
   filename = file.path(plots_dir, paste0(safe, "_dis24_timeseries.png")),
   plot = p_dis,
   width = 10,
-  height = 4,
+  height = 5,
   dpi = 200
 )
 
@@ -713,6 +713,10 @@ p_dis
 ### Boxplot of Discharge Z-Scores by Type
 
 ```{r}
+#Setting Up Same Colors as Above 
+colors <- plasma(4)
+av_type_colors <- setNames(colors, levels(join_dis$av_type))
+
 
 #Establishing Title
 title <- "Z-Score of Peak Discharge for Avulsion Year and Year Prior by Avulsion Type"
@@ -749,7 +753,8 @@ gardner_type <- join_dis |>
   labs(
        x = "Avulsion Type", y = "Discharge Z-Score (-)") +
   theme_classic(base_size = 18) +
-  scale_fill_brewer(palette = "Greys") +  
+  #scale_fill_brewer(palette = "Greys") +  
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
   theme(
     axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
     axis.title.x = element_blank(),
@@ -899,7 +904,8 @@ gardner_type <- join_sed |>
   labs(title = element_blank(), 
        x = "Avulsion Type", y = "SSC Z-Score (-)") +
   theme_classic(base_size = 18) +
-  scale_fill_brewer(palette = "Greys") +  
+  #scale_fill_brewer(palette = "Greys") +  
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
   theme(
     axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
     axis.title.x = element_blank(),
@@ -923,7 +929,7 @@ ggsave(
   filename = here("plots", "ssc_zscore_type_box.jpg"), 
   plot = gardner_type, 
   device = "jpg",
-  height = 8, width = 7, units = "in"
+  height = 4, width = 8, units = "in"
 )
 
 ```
@@ -940,7 +946,7 @@ ssc_overall <- join_sed |>
     width = 0.15,
     alpha = 0.6,
     size = 2,
-    color = "gray30"
+    color = "gray70"
   ) +
 
   # boxplot
