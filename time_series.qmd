@@ -287,7 +287,7 @@ compiled <- compiled %>%
 # -------------------------
 # SELECT ONE SITE HERE
 # -------------------------
-site <- "BETSIBOKA.2004"
+site <- "B6"
 
 site_df <- compiled %>%
   filter(site_name == site) %>%
@@ -472,7 +472,7 @@ xmax <- as.POSIXct("2020-12-31", tz = "UTC")
 # -------------------------
 # CHOOSE ONE SITE HERE
 # -------------------------
-site <- "BETSIBOKA.2004"
+site <- "B6"
 
 site_df <- compiled %>%
   filter(site_name == site) %>%
@@ -625,7 +625,6 @@ p_dis
 ```
 
 ### Precipitation
-
 
 ```{r}
 av_year_path  <- here("data", "chirps_zscore.csv")

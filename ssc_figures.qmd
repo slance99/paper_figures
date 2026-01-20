@@ -46,7 +46,7 @@ library(scales)
 
 ```{r, output=FALSE}}
 
-join_sed = read_csv(here("data","z_score_method3.csv")) |>
+join_sed = read_csv(here("data","sediment_zscore.csv")) |>
   drop_na()
 
 ```

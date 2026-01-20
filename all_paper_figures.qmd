@@ -1,0 +1,1159 @@
+---
+title: "Templates for All Maps and Graphs + Descriptive Statistics"
+description: "This document is meant to act as the location where all final version graphs are meant to be created, and all descriptive statistics put onto those graphs will be calcualted. This synthesizes material from other documents up to this point. "
+author: "Sam Lance"
+format:
+  html:
+    code-fold: true
+    toc: true
+    number-sections: true
+    embed-resources: true
+    theme: Lux
+editor: visual
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r, include =FALSE}
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(here)
+library(ggplot2)
+library(stringr)
+library(purrr)
+library(maps)
+library(knitr)
+library(kableExtra)
+library(sf)
+library(RColorBrewer)
+library(patchwork)
+library(tmap)
+library(viridis)
+library(sp)
+library(rworldmap)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(scales)
+library(devtools)
+library(calecopal)
+```
+
+## Reading In + Cleaning Data
+
+### Reading in Data
+
+```{r, output=FALSE}}
+#DISCHARGE
+join_dis <- read_csv(here("data","discharge_av_year_z.csv")) |>
+  inner_join(
+    read_csv(here("data","all_site_data_102825.csv")) |>
+      select(site_name, site_lat, site_lon),   # no av_type
+    by = "site_name") |>
+  drop_na()
+
+#Sediment 
+join_sed = read_csv(here("data","z_score_method3.csv")) |>
+  drop_na()
+
+```
+
+### Cleaning Discharge Data
+
+```{r}
+#Convert DF to SF Object 
+sf_dis <- st_as_sf(join_dis, 
+                           coords = c("site_lon", "site_lat"), #locate long and lat in df
+                           crs = 4326,
+                       remove = FALSE) #setting coordinate reference system WGS84
+
+#Load Data from Natural Earth 
+world <- ne_countries(scale = "medium", returnclass = "sf") |> #turn into SF object 
+  select(name, continent, geometry)   # keep only country name + continent
+
+#Spatial Join
+#Assigning every point a continent based on location
+continent_joined <- st_join(sf_dis, world, join = st_within)
+
+#If nothing within then go with the nearest continent 
+miss_idx <- which(is.na(continent_joined$continent))
+if (length(miss_idx) > 0) {
+  nearest_row_in_world <- st_nearest_feature(continent_joined[miss_idx, ], world)
+  continent_joined$continent[miss_idx] <- world$continent[nearest_row_in_world]
+  continent_joined$name[miss_idx]      <- world$name[nearest_row_in_world]
+}
+
+#Final Renaming and Creating New DF 
+sf_dis <- continent_joined %>%
+  st_drop_geometry() %>%
+  rename(country = name)
+
+```
+
+### Cleaning Sediment Data
+
+```{r}
+
+#Convert DF to SF Object 
+sf_sed <- st_as_sf(join_sed, 
+                           coords = c("site_lon", "site_lat"), #locate long and lat in df
+                           crs = 4326,
+                       remove = FALSE) #setting coordinate reference system WGS84
+
+#Load Data from Natural Earth 
+world <- ne_countries(scale = "medium", returnclass = "sf") |> #turn into SF object 
+  select(name, continent, geometry)   # keep only country name + continent
+
+#Spatial Join
+#Assigning every point a continent based on location
+continent_joined <- st_join(sf_sed, world, join = st_within)
+
+#If nothing within then go with the nearest continent 
+miss_idx <- which(is.na(continent_joined$continent))
+if (length(miss_idx) > 0) {
+  nearest_row_in_world <- st_nearest_feature(continent_joined[miss_idx, ], world)
+  continent_joined$continent[miss_idx] <- world$continent[nearest_row_in_world]
+  continent_joined$name[miss_idx]      <- world$name[nearest_row_in_world]
+}
+
+#Final Renaming and Creating New DF 
+sf_sed <- continent_joined %>%
+  st_drop_geometry() %>%
+  rename(country = name)
+
+```
+
+## Figure 1 - World Map with Avulsion Types
+
+### Establishing Colors and Shapes for All Maps
+
+```{r}
+#Loading in World Map Data
+world_map <- ne_countries(scale = "medium", returnclass = "sf")
+
+#Establish Legend Breaks, Colors, and Desired Shapes
+colors <- plasma(4)
+rev_colors <- colors
+shapes <- c(21, 22, 23, 24)
+
+#devtools::install_github("an-bui/calecopal")# filled shapes
+# breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
+# colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
+# rev_colors <- rev(colors)  # Reverse the color order
+# shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
+
+```
+
+### Robinson Projection World Map
+
+```{r}
+
+library(tidyverse)
+library(sf)
+library(ggplot2)
+
+# -------------------------
+# Inputs assumed to exist:
+# world_map (sf polygons, lon/lat)
+# sf_dis (dataframe with site_lon, site_lat, site_name, av_type)
+# rev_colors (vector of colors)
+# shapes (named vector of shapes for av_type)
+# -------------------------
+
+# 1) Select sites to highlight
+selected_sites <- sf_dis |>
+  filter(site_name %in% c("B9", "R3.2", "JA.25.India.1990", "MANAMBOLO.2004"))
+
+# 2) Ensure factor levels consistent
+sf_dis <- sf_dis |>
+  mutate(av_type = factor(av_type))
+
+# 3) Named color vector for av_type
+av_type_colors <- setNames(rev_colors, levels(sf_dis$av_type))
+
+# 4) Robinson CRS
+crs_robin <- "+proj=robin +lon_0=0 +datum=WGS84 +units=m +no_defs"
+
+# 5) Make points sf (critical for correct projection)
+sf_dis_sf <- st_as_sf(
+  sf_dis,
+  coords = c("site_lon", "site_lat"),
+  crs = 4326,
+  remove = FALSE
+)
+
+selected_sites_sf <- st_as_sf(
+  selected_sites,
+  coords = c("site_lon", "site_lat"),
+  crs = 4326,
+  remove = FALSE
+)
+
+# 6) Ensure world_map has CRS (if not already)
+if (is.na(st_crs(world_map))) st_crs(world_map) <- 4326
+
+# 7) Create a "globe" outline and optional graticule
+globe_outline <- st_as_sfc(
+  st_bbox(c(xmin = -180, ymin = -90, xmax = 180, ymax = 90), crs = st_crs(4326))
+) |>
+  st_transform(crs_robin)
+
+# Optional graticule
+grat <- st_graticule(
+  lon = seq(-180, 180, by = 60),
+  lat = seq(-60, 60, by = 30),
+  crs = st_crs(4326)
+) |>
+  st_transform(crs_robin)
+
+# -------------------------
+# NEW: Top + bottom boundary (latitude caps)
+# -------------------------
+lat_min <- -90
+lat_max <- 90
+lon_seq <- seq(-180, 180, by = 0.25)
+
+make_parallel <- function(lat) {
+  st_sfc(
+    st_linestring(cbind(lon_seq, rep(lat, length(lon_seq)))),
+    crs = 4326
+  ) |>
+    st_transform(crs_robin)
+}
+
+bottom_boundary <- make_parallel(lat_min)
+top_boundary    <- make_parallel(lat_max)
+
+# 8) Build plot (Robinson + globe boundary)
+world_map_plot <- ggplot() +
+
+  # Light graticule behind everything (optional; remove if you don’t want lines)
+  geom_sf(data = grat, color = "grey70", linewidth = 0.25) +
+
+  # Continents
+  geom_sf(
+    data = world_map,
+    fill = "grey70",
+    color = "grey60",
+    linewidth = 0.25
+  ) +
+
+  # All sites
+  geom_sf(
+    data = sf_dis_sf,
+    aes(fill = av_type, shape = av_type, color = av_type),
+    size = 3,
+    alpha = 0.8,
+    stroke = 0.5
+  ) +
+
+  # Selected sites: same fill/shape, red outline
+  geom_sf(
+    data = selected_sites_sf,
+    aes(fill = av_type, shape = av_type),
+    size = 3,
+    alpha = 0.8,
+    stroke = 1.0,
+    color = "black",
+    show.legend = FALSE
+  ) +
+
+  # -------------------------
+  # NEW: draw top/bottom boundary lines
+  # -------------------------
+  geom_sf(data = bottom_boundary, color = "grey70", linewidth = 0.7) +
+  geom_sf(data = top_boundary,    color = "grey70", linewidth = 0.7) +
+
+  # Globe outline (draw last so it frames everything)
+  geom_sf(
+    data = globe_outline,
+    fill = NA,
+    color = "grey70",
+    linewidth = 0.7
+  ) +
+
+  # Scales
+  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_shape_manual(name = "Avulsion Type", values = shapes) +
+
+  # Robinson projection
+  coord_sf(crs = crs_robin, expand = FALSE) +
+
+  # Styling
+  theme_minimal(base_size = 16) +
+  theme(
+    axis.title = element_blank(),
+    axis.text  = element_blank(),
+    axis.ticks = element_blank(),
+
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+
+    plot.background  = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    
+    #legend.position = "none",
+    legend.position = c(0.2, 0.25),
+    legend.direction = "vertical",
+    legend.box = "vertical",
+    legend.title = element_text(face = "bold"),
+    legend.title.align = 0.5,
+    legend.spacing.y = unit(-0.1, "cm"),
+    legend.key.height = unit(0.3, "lines"),
+    legend.background = element_rect(fill = "white", color = "white")
+  ) +
+  guides(
+    fill  = guide_legend(byrow = TRUE),
+    shape = guide_legend(byrow = TRUE)
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots", "fig1_world_robinson_globe.png"),
+  plot = world_map_plot,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+
+```
+
+## Figure 2 - Time Series
+
+### Sediment
+
+```{r}
+
+# -------------------------
+# Paths
+# -------------------------
+av_year_updated_path <- here("data", "z_score_method3.csv")
+compiled_output_path <- here("data", "time_series.csv")
+plots_dir <- "/Volumes/Crucial X6/paper_figures/rstudio/plots"
+
+# -------------------------
+# Load data
+# -------------------------
+av_year_updated <- read_csv(av_year_updated_path, show_col_types = FALSE)
+compiled <- read_csv(compiled_output_path, show_col_types = FALSE)
+
+compiled <- compiled %>%
+  mutate(date = as.Date(date))
+
+# -------------------------
+# SELECT ONE SITE HERE
+# -------------------------
+site <- "MALAWI1.2014"
+
+site_df <- compiled %>%
+  filter(site_name == site) %>%
+  arrange(date)
+
+stopifnot(nrow(site_df) > 0)
+
+# -------------------------
+# Avulsion shading window
+# -------------------------
+avs <- if ("avulsion_start_date" %in% names(site_df)) {
+  site_df %>%
+    pull(avulsion_start_date) %>%
+    as.numeric() %>%
+    na.omit() %>%
+    unique()
+} else {
+  numeric(0)
+}
+
+shade_df <- NULL
+if (length(avs) > 0) {
+  shade_df <- tibble(
+    xmin = as.Date(paste0(avs[1] - 1, "-01-01")),
+    xmax = as.Date(paste0(avs[1], "-12-31")),
+    ymin = -Inf,
+    ymax = Inf
+  )
+}
+
+# -------------------------
+# Mean 95th percentile line (from zscore table)
+# -------------------------
+year_p95 <- av_year_updated %>%
+  filter(site_name == site) %>%
+  pull(p95_mean) %>%
+  first()
+
+# -------------------------
+# 95th percentile value within the shaded window,
+# plotted at the exact date of the maximum within the window
+# -------------------------
+p95_pt <- NULL
+
+if (!is.null(shade_df)) {
+  window_df <- site_df %>%
+    filter(date >= shade_df$xmin, date <= shade_df$xmax) %>%
+    filter(!is.na(y_pred))
+
+  if (nrow(window_df) > 0) {
+    p95_val <- as.numeric(quantile(window_df$y_pred, probs = 0.95, na.rm = TRUE, type = 7))
+
+    max_row <- window_df %>%
+      filter(y_pred == max(y_pred, na.rm = TRUE)) %>%
+      arrange(date) %>%   # if ties, use earliest max date
+      slice(1)
+
+    p95_pt <- tibble(
+      date = max_row$date,
+      y_pred = p95_val
+    )
+  }
+}
+
+# -------------------------
+# Plot
+# -------------------------
+p_ssc <- ggplot(site_df, aes(x = date, y = y_pred)) +
+
+  # Avulsion shading
+  {if (!is.null(shade_df))
+    geom_rect(
+      data = shade_df,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      inherit.aes = FALSE,
+      fill = "#fff7bc",
+      alpha = 0.6
+    )
+  } +
+  
+    # Mean p95 line
+  {if (!is.na(year_p95))
+    geom_hline(
+      yintercept = year_p95,
+      linetype = "dashed",
+      color = "black",
+      linewidth = 0.75,
+      alpha = 0.75
+    )
+  } +
+
+  # Time series
+  geom_point(color = "grey30", size = 0.75) +
+  geom_line(color = "grey30", linewidth = 0.75) +
+
+# Red hollow circle: y = p95(window), x = date of max(window)
+{ if (!is.null(p95_pt))
+  geom_point(
+    data = p95_pt,
+    aes(x = date, y = y_pred),
+    inherit.aes = FALSE,
+    shape = 21,        # hollow circle
+    size = 5,
+    stroke = 1.2,      # outline thickness
+    fill = NA,
+    color = "red",
+    alpha = 0.5
+  )
+} +
+
+  # Axes (keep only scale_x_date to avoid scale replacement warnings)
+  scale_x_date(
+    limits = as.Date(c("1985-01-01", "2020-12-31")),
+    breaks = seq(as.Date("1985-01-01"),
+                 as.Date("2020-01-01"),
+                 by = "5 years"),
+    labels = date_format("%Y"),
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+
+  labs(
+    x = "Year",
+    y = "SSC (mg/L)"
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(
+      linetype  = "solid",
+      linewidth = 0.25,
+      color = "grey90"),
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_blank(),
+    
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    
+    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+    
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    
+    legend.position = "none",
+    
+  plot.background = element_rect(fill = "transparent", colour = NA)
+  )
+
+# -------------------------
+# Save
+# -------------------------
+safe_name <- site %>%
+  str_replace_all(" ", "_") %>%
+  str_replace_all("/", "_")
+
+ggsave(
+  filename = file.path(plots_dir, paste0(safe_name, "_ssc_timeseries.png")),
+  plot = p_ssc,
+  width = 10,
+  height = 4,
+  dpi = 300
+)
+
+p_ssc
+
+
+```
+
+### Discharge
+
+```{r}
+# Paths
+av_year_path  <- here("data","discharge_av_year_z.csv")
+compiled_path <- here("data", "compiled_dis24.csv")
+plots_dir     <- "/Volumes/Crucial X6/paper_figures/rstudio/plots"
+
+dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Read data
+compiled        <- read_csv(compiled_path, show_col_types = FALSE)
+av_year_updated <- read_csv(av_year_path, show_col_types = FALSE)
+
+# Parse datetime
+compiled <- compiled %>%
+  mutate(valid_time = as.POSIXct(valid_time, tz = "UTC"))
+
+xmin <- as.POSIXct("1985-01-01", tz = "UTC")
+xmax <- as.POSIXct("2020-12-31", tz = "UTC")
+
+# -------------------------
+# CHOOSE ONE SITE HERE
+# -------------------------
+site <- "MALAWI1.2014"
+
+site_df <- compiled %>%
+  filter(site_name == site) %>%
+  arrange(valid_time)
+
+stopifnot(nrow(site_df) > 0)
+
+# ---- Avulsion shading window (if column exists + has a value) ----
+avs <- if ("avulsion_start_date" %in% names(site_df)) {
+  site_df %>%
+    pull(avulsion_start_date) %>%
+    as.numeric() %>%
+    na.omit() %>%
+    unique()
+} else {
+  numeric(0)
+}
+
+shade_df <- NULL
+if (length(avs) > 0) {
+  shade_df <- tibble(
+    xmin = as.POSIXct(paste0(avs[1] - 1, "-01-01"), tz = "UTC"),
+    xmax = as.POSIXct(paste0(avs[1], "-12-31"), tz = "UTC"),
+    ymin = -Inf,
+    ymax = Inf
+  )
+}
+
+# ---- Mean 95th percentile line for this site (from zscore table) ----
+year_p95 <- av_year_updated %>%
+  filter(site_name == site) %>%
+  pull(p95_mean) %>%
+  first()
+
+# ---- 95th percentile point within shaded window (x = date of max in window) ----
+p95_pt <- NULL
+
+if (!is.null(shade_df)) {
+  window_df <- site_df %>%
+    filter(valid_time >= shade_df$xmin, valid_time <= shade_df$xmax) %>%
+    filter(!is.na(dis24))
+
+  if (nrow(window_df) > 0) {
+    # window-specific 95th percentile value
+    p95_val <- as.numeric(quantile(window_df$dis24, probs = 0.95, na.rm = TRUE, type = 7))
+
+    # exact date of maximum discharge within the window (tie-break: earliest)
+    max_row <- window_df %>%
+      filter(dis24 == max(dis24, na.rm = TRUE)) %>%
+      arrange(valid_time) %>%
+      slice(1)
+
+    # plot p95 value at the max date
+    p95_pt <- tibble(
+      valid_time = max_row$valid_time,
+      dis24      = p95_val
+    )
+  }
+}
+
+# ---- Plot ----
+p_dis <- ggplot(site_df, aes(x = valid_time, y = dis24)) +
+
+  # Avulsion shading
+  {if (!is.null(shade_df))
+    geom_rect(
+      data = shade_df,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      inherit.aes = FALSE,
+      fill = "#fff7bc",
+      alpha = 0.6
+    )
+  } +
+  
+    # Mean p95 line
+  {if (!is.na(year_p95))
+    geom_hline(
+      yintercept = year_p95,
+      color = "black",
+      linetype = "dashed",
+      linewidth = 0.75,
+      alpha = 0.75
+    )
+  } +
+
+  # Base line
+  geom_point(color = "grey30", size = 0.75) +
+  geom_line(color = "grey30", linewidth = 0.75) +
+
+  # Blue point: y = p95(window), x = date of max(window)
+  { if (!is.null(p95_pt))
+  geom_point(
+    data = p95_pt,
+    aes(x = valid_time, y = dis24),
+    inherit.aes = FALSE,
+    shape = 21,        # hollow circle
+    size = 5,
+    stroke = 1.2,      # outline thickness
+    fill = NA,
+    color = "red",
+    alpha = 0.5
+  )
+} +
+
+  scale_y_continuous(expand = c(0, 0)) +
+
+  # Date ticks + limits (add expand here; drop scale_x_continuous to avoid scale conflicts)
+  scale_x_datetime(
+    limits = c(xmin, xmax),
+    breaks = seq(xmin, xmax, by = "5 years"),
+    labels = date_format("%Y"),
+    expand = c(0, 0)
+  ) +
+
+  labs(
+    x = "Year",
+    y = "Discharge (m³/s)"
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.20, color = "grey90"),
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_blank(),
+    
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    
+    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+    
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    
+    legend.position = "none",
+    
+  plot.background = element_rect(fill = "transparent", colour = NA)
+  )
+
+# ---- Save (one file) ----
+safe <- site %>%
+  as.character() %>%
+  str_replace_all(" ", "_") %>%
+  str_replace_all("/", "_")
+
+ggsave(
+  filename = file.path(plots_dir, paste0(safe, "_dis24_timeseries.png")),
+  plot = p_dis,
+  width = 10,
+  height = 4,
+  dpi = 200
+)
+
+# Print the plot in RStudio/Quarto
+p_dis
+
+
+
+```
+
+## Figure 3 - Boxplots of Discharge Z-Score
+
+### Boxplot of Discharge Z-Scores by Type
+
+```{r}
+
+#Establishing Title
+title <- "Z-Score of Peak Discharge for Avulsion Year and Year Prior by Avulsion Type"
+
+#Computing T-Tests
+fan = join_dis |>
+  filter(av_type == "fan")
+
+delta = join_dis |>
+  filter(av_type == "delta")
+
+il = join_dis |>
+  filter(av_type == "intra-lobe")
+
+retro = join_dis |>
+  filter(av_type == "retrogradational")
+
+
+t_fan = t.test(fan$p95_zscore, mu = 0)
+t_delta = t.test(delta$p95_zscore, mu = 0)
+t_il = t.test(il$p95_zscore, mu = 0)
+t_retro = t.test(retro$p95_zscore, mu = 0)
+t_all = t.test(join_dis$p95_zscore, mu = 0)
+
+print(t_all)
+
+#Setting Up Plot Base
+gardner_type <- join_dis |>
+  ggplot(aes(x = av_type, y = p95_zscore, fill = av_type)) +
+  geom_jitter(width = 0.2, alpha = 0.7, size = 2, color = "gray30") +
+  geom_boxplot(show.legend = FALSE, alpha = 0.5) +
+  stat_summary(fun = mean, geom = "crossbar", width = 0.5, color = scales::alpha("red", 0.50)) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", linewidth = 1.2) +
+  labs(
+       x = "Avulsion Type", y = "Discharge Z-Score (-)") +
+  theme_classic(base_size = 18) +
+  scale_fill_brewer(palette = "Greys") +  
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_blank(),
+    
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    
+    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+    
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    
+    legend.position = "none",
+    
+  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+  )
+print(gardner_type)
+
+ggsave(
+  filename = here("plots", "dis_zscore_type_box.jpg"),
+  plot = gardner_type,
+  device = "jpg",
+  height = 4, width = 8, units = "in"
+)
+
+```
+
+### Boxplot of Overall Discharge
+
+```{r}
+
+#Create boxplot of all discharge 
+
+overall_dis <- join_dis |>
+  ggplot(aes(x = "all sites", y = p95_zscore)) +
+
+  # raw data
+  geom_jitter(
+    width = 0.15,
+    alpha = 0.6,
+    size = 2,
+    color = "gray30"
+  ) +
+
+  # boxplot
+  geom_boxplot(
+    width = 0.35,
+    fill = "grey70",
+    alpha = 0.6,
+    outlier.shape = NA
+  ) +
+
+  # zero reference
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "grey30",
+    linewidth = 1.2
+  ) +
+
+  # mean (solid red line)
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.35,
+    color = scales::alpha("red", 0.50),
+    linewidth = 0.5
+  ) +
+
+  labs(
+    x = NULL,
+    y = "Discharge Z-Score (-)"
+  ) +
+
+  theme_classic(base_size = 18) +
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_text(color = "grey30", size = 20, face = "bold"),
+    
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    
+    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+    
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    
+    legend.position = "none",
+    
+  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+  )
+
+overall_dis
+
+ggsave(
+  filename = here("plots", "discharge_overall_box.png"), 
+  bg = "transparent",
+  plot = overall_dis, 
+  device = "png",
+  height = 4, width = 4, units = "in"
+)
+
+
+```
+
+### Boxplot of SSC:
+
+```{r}
+
+#Establishing Title
+#title <- "Z-Score of Peak SSC for Avulsion Year and Year Prior by Avulsion Type"
+
+#Computing T-Tests
+fan = join_sed |>
+  filter(av_type == "fan")
+
+delta = join_sed |>
+  filter(av_type == "delta")
+
+il = join_sed |>
+  filter(av_type == "intra-lobe")
+
+retro = join_sed |>
+  filter(av_type == "retrogradational")
+
+
+t_fan = t.test(fan$p95_zscore, mu = 0)
+t_delta = t.test(delta$p95_zscore, mu = 0)
+t_il = t.test(il$p95_zscore, mu = 0)
+t_retro = t.test(retro$p95_zscore, mu = 0)
+t_all = t.test(join_sed$p95_zscore, mu = 0)
+
+print(t_all)
+
+#Setting Up Plot Base
+gardner_type <- join_sed |>
+  ggplot(aes(x = av_type, y = p95_zscore, fill = av_type)) +
+  geom_jitter(width = 0.2, alpha = 0.7, size = 2, color = "gray30") +
+  geom_boxplot(show.legend = FALSE, alpha = 0.5) +
+  stat_summary(fun = mean, 
+               geom = "crossbar", 
+               width = 0.5, 
+               color = scales::alpha("red", 0.50)) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", linewidth = 1.2) +
+  labs(title = element_blank(), 
+       x = "Avulsion Type", y = "SSC Z-Score (-)") +
+  theme_classic(base_size = 18) +
+  scale_fill_brewer(palette = "Greys") +  
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_blank(),
+    
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    
+    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+    
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    
+    legend.position = "none",
+    
+  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+  )
+print(gardner_type)
+
+ggsave(
+  filename = here("plots", "ssc_zscore_type_box.jpg"), 
+  plot = gardner_type, 
+  device = "jpg",
+  height = 8, width = 7, units = "in"
+)
+
+```
+
+### Boxplot of Overall SSC:
+
+```{r}
+
+ssc_overall <- join_sed |>
+  ggplot(aes(x = "all sites", y = p95_zscore)) +
+
+  # raw data
+  geom_jitter(
+    width = 0.15,
+    alpha = 0.6,
+    size = 2,
+    color = "gray30"
+  ) +
+
+  # boxplot
+  geom_boxplot(
+    width = 0.35,
+    fill = "grey70",
+    alpha = 0.6,
+    outlier.shape = NA
+  ) +
+
+  # zero reference
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "gray30",
+    linewidth = 1.2
+  ) +
+
+  # mean (solid red line)
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.35,
+    color = scales::alpha("red", 0.50),
+    linewidth = 0.5
+  ) +
+
+  labs(
+    x = NULL,
+    y = "SSC Z-Score (-)"
+  ) +
+
+  theme_classic(base_size = 18) +
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_text(color = "grey30", size = 20, face = "bold"),
+    
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    
+    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+    
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    
+    legend.position = "none",
+    
+  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+  )
+
+ssc_overall
+
+ggsave(
+  filename = here("plots", "ssc_overall_box.png"), 
+  bg = "transparent",
+  plot = ssc_overall, 
+  device = "png",
+  height = 4, width = 4, units = "in"
+)
+
+```
+
+## Supplemental Figures:
+
+### World Map of Discharge Z-Score
+
+```{r}
+#Set Up Map Extent
+xmin <- -170
+xmax <- 170
+
+#Find Standard Deviation for the Dataset
+#Purpose: use for the scale to condense and make a little easier to visualize 
+std_dev_dis <- sd(join_dis$p95_zscore, na.rm = TRUE)
+
+world_map <- ne_countries(scale = "medium", returnclass = "sf") |>
+  filter(continent != "Antarctica")
+
+world_map_plot <- ggplot() +
+  geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
+  geom_point(
+    data = join_dis,
+    aes(x = site_lon, y = site_lat, color = p95_zscore),
+    size = 3,
+    alpha = 0.85,
+    shape = 16
+  ) +
+  scale_color_distiller(
+    name = "Discharge Z-Score",
+    palette = "Spectral",
+    limits = c(-0.8, 0.8),
+    oob = scales::squish
+  ) +
+  coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
+
+  theme_void(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+
+    # Legend placement and sizing
+    legend.position = "top",
+    legend.justification = "center",
+    legend.box = "vertical",
+
+    # Text sizing
+    legend.title = element_text(face = "bold", size = 20),
+    legend.text  = element_text(size = 20),
+
+    # Spacing
+    legend.margin = margin(t = 12, b = 12),
+    legend.spacing.x = unit(1.5, "cm"),
+
+    # Give the plot a bit more breathing room
+    plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
+  ) +
+  guides(
+    color = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth  = unit(0.4, "npc"),   # spans most of plot width
+      barheight = unit(0.4, "cm"),
+      direction = "horizontal"
+    )
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots", "world_dis_fig3.png"),
+  plot = world_map_plot,
+  width = 16,
+  height = 8,
+  units = "in",
+  dpi = 300
+)
+
+
+```
+
+### World Map of SSC
+
+```{r}
+
+#Set Map Extents
+xmin <- -170
+xmax <- 170
+
+#Find Standard Deviation for the Dataset
+#Purpose: use for the scale to condense and make a little easier to visualize 
+std_dev_sed <- sd(join_sed$p95_zscore, na.rm = TRUE)
+
+world_map <- ne_countries(
+  scale = "medium", returnclass = "sf") |>
+  filter(continent != "Antarctica")
+
+world_map_plot <- ggplot() +
+  geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
+  geom_point(
+    data = join_sed,
+    aes(x = site_lon, y = site_lat, color = p95_zscore),
+    size = 3,
+    alpha = 0.85,
+    shape = 16
+  ) +
+  scale_color_distiller(
+    name = "SSC Z-Score",
+    palette = "Spectral",
+    limits = c(-std_dev_sed, std_dev_sed),
+    oob = scales::squish
+  ) +
+  coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
+
+  theme_void(base_size = 14) +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+
+    # Legend placement and sizing
+    legend.position = "top",
+    legend.justification = "center",
+    legend.box = "vertical",
+
+    # Text sizing
+    legend.title = element_text(face = "bold", size = 20),
+    legend.text  = element_text(size = 20),
+
+    # Spacing
+    legend.margin = margin(t = 12, b = 12),
+    legend.spacing.x = unit(1.5, "cm"),
+
+    # Give the plot a bit more breathing room
+    plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
+  ) +
+  guides(
+    color = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth  = unit(0.4, "npc"),   # spans most of plot width
+      barheight = unit(0.4, "cm"),
+      direction = "horizontal"
+    )
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots", "world_ssc_fig3.png"),
+  plot = world_map_plot,
+  width = 16,
+  height = 8,
+  units = "in",
+  dpi = 300
+)
+```

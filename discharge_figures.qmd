@@ -38,6 +38,8 @@ library(rworldmap)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(scales)
+library(devtools)
+library(calecopal)
 ```
 
 ## Reading In + Cleaning Data
@@ -46,7 +48,7 @@ library(scales)
 
 ```{r, output=FALSE}}
 
-join_dis <- read_csv(here("data","discharge_zscore.csv")) |>
+join_dis <- read_csv(here("data","discharge_av_year_z.csv")) |>
   inner_join(
     read_csv(here("data","all_site_data_102825.csv")) |>
       select(site_name, site_lat, site_lon),   # no av_type
@@ -93,13 +95,14 @@ sf_dis <- continent_joined %>%
 
 ```{r}
 #Loading in World Map Data
-world_map <- ne_countries(scale = "medium", returnclass = "sf") |>
-  dplyr::filter(continent != "Antarctica")
+world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
 #Establish Legend Breaks, Colors, and Desired Shapes
-colors <- brewer.pal(4, "Spectral")
-rev_colors <- rev(colors)
-shapes <- c(21, 22, 23, 24)   # filled shapes
+colors <- plasma(4)
+rev_colors <- colors
+shapes <- c(21, 22, 23, 24)
+
+#devtools::install_github("an-bui/calecopal")# filled shapes
 # breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
 # colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
 # rev_colors <- rev(colors)  # Reverse the color order
@@ -112,7 +115,7 @@ shapes <- c(21, 22, 23, 24)   # filled shapes
 ```{r}
 
 selected_sites <- sf_dis |>
-  filter(site_name %in% c("B9", "R28.1", "JA.25.India.1990", "JAVA12.1985"))
+  filter(site_name %in% c("B9", "R3.2", "JA.25.India.1990", "MANAMBOLO.2004"))
 
 # Make sure av_type is a factor and levels are consistent
 sf_dis$av_type <- factor(sf_dis$av_type)
@@ -134,8 +137,8 @@ world_map_plot <- world_map |>
       shape = av_type,
       color = av_type
     ),
-    size = 2,
-    alpha = 0.7           # no outline
+    size = 3,
+    alpha = 0.7         # no outline
   ) +
   
   # Selected sites: same fill, but yellow outline
@@ -147,10 +150,10 @@ world_map_plot <- world_map |>
       fill = av_type,
       shape = av_type
     ),
-    size = 2,
+    size = 3,
+    stroke = 2,
     alpha = 0.7,
-    stroke = 1,
-    color = "yellow",     # yellow outline only for selected sites
+    color = "black",     # yellow outline only for selected sites
     show.legend = FALSE   # <<< this removes yellow outlines from legend
   ) +
    scale_color_manual(
@@ -204,7 +207,184 @@ ggsave(
 
 ```
 
-### Pacific Islands
+### Robinson Projection World Map
+
+```{r}
+
+library(tidyverse)
+library(sf)
+library(ggplot2)
+
+# -------------------------
+# Inputs assumed to exist:
+# world_map (sf polygons, lon/lat)
+# sf_dis (dataframe with site_lon, site_lat, site_name, av_type)
+# rev_colors (vector of colors)
+# shapes (named vector of shapes for av_type)
+# -------------------------
+
+# 1) Select sites to highlight
+selected_sites <- sf_dis |>
+  filter(site_name %in% c("B9", "R3.2", "JA.25.India.1990", "MANAMBOLO.2004"))
+
+# 2) Ensure factor levels consistent
+sf_dis <- sf_dis |>
+  mutate(av_type = factor(av_type))
+
+# 3) Named color vector for av_type
+av_type_colors <- setNames(rev_colors, levels(sf_dis$av_type))
+
+# 4) Robinson CRS
+crs_robin <- "+proj=robin +lon_0=0 +datum=WGS84 +units=m +no_defs"
+
+# 5) Make points sf (critical for correct projection)
+sf_dis_sf <- st_as_sf(
+  sf_dis,
+  coords = c("site_lon", "site_lat"),
+  crs = 4326,
+  remove = FALSE
+)
+
+selected_sites_sf <- st_as_sf(
+  selected_sites,
+  coords = c("site_lon", "site_lat"),
+  crs = 4326,
+  remove = FALSE
+)
+
+# 6) Ensure world_map has CRS (if not already)
+if (is.na(st_crs(world_map))) st_crs(world_map) <- 4326
+
+# 7) Create a "globe" outline and optional graticule
+globe_outline <- st_as_sfc(
+  st_bbox(c(xmin = -180, ymin = -90, xmax = 180, ymax = 90), crs = st_crs(4326))
+) |>
+  st_transform(crs_robin)
+
+# Optional graticule
+grat <- st_graticule(
+  lon = seq(-180, 180, by = 60),
+  lat = seq(-60, 60, by = 30),
+  crs = st_crs(4326)
+) |>
+  st_transform(crs_robin)
+
+# -------------------------
+# NEW: Top + bottom boundary (latitude caps)
+# -------------------------
+lat_min <- -90
+lat_max <- 90
+lon_seq <- seq(-180, 180, by = 0.25)
+
+make_parallel <- function(lat) {
+  st_sfc(
+    st_linestring(cbind(lon_seq, rep(lat, length(lon_seq)))),
+    crs = 4326
+  ) |>
+    st_transform(crs_robin)
+}
+
+bottom_boundary <- make_parallel(lat_min)
+top_boundary    <- make_parallel(lat_max)
+
+# 8) Build plot (Robinson + globe boundary)
+world_map_plot <- ggplot() +
+
+  # Light graticule behind everything (optional; remove if you don’t want lines)
+  geom_sf(data = grat, color = "grey70", linewidth = 0.25) +
+
+  # Continents
+  geom_sf(
+    data = world_map,
+    fill = "grey70",
+    color = "grey60",
+    linewidth = 0.25
+  ) +
+
+  # All sites
+  geom_sf(
+    data = sf_dis_sf,
+    aes(fill = av_type, shape = av_type, color = av_type),
+    size = 3,
+    alpha = 0.8,
+    stroke = 0.5
+  ) +
+
+  # Selected sites: same fill/shape, red outline
+  geom_sf(
+    data = selected_sites_sf,
+    aes(fill = av_type, shape = av_type),
+    size = 3,
+    alpha = 0.8,
+    stroke = 1.0,
+    color = "black",
+    show.legend = FALSE
+  ) +
+
+  # -------------------------
+  # NEW: draw top/bottom boundary lines
+  # -------------------------
+  geom_sf(data = bottom_boundary, color = "grey70", linewidth = 0.7) +
+  geom_sf(data = top_boundary,    color = "grey70", linewidth = 0.7) +
+
+  # Globe outline (draw last so it frames everything)
+  geom_sf(
+    data = globe_outline,
+    fill = NA,
+    color = "grey70",
+    linewidth = 0.7
+  ) +
+
+  # Scales
+  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_shape_manual(name = "Avulsion Type", values = shapes) +
+
+  # Robinson projection
+  coord_sf(crs = crs_robin, expand = FALSE) +
+
+  # Styling
+  theme_minimal(base_size = 16) +
+  theme(
+    axis.title = element_blank(),
+    axis.text  = element_blank(),
+    axis.ticks = element_blank(),
+
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+
+    plot.background  = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    
+    #legend.position = "none",
+    legend.position = c(0.2, 0.25),
+    legend.direction = "vertical",
+    legend.box = "vertical",
+    legend.title = element_text(face = "bold"),
+    legend.title.align = 0.5,
+    legend.spacing.y = unit(-0.1, "cm"),
+    legend.key.height = unit(0.3, "lines"),
+    legend.background = element_rect(fill = "white", color = "white")
+  ) +
+  guides(
+    fill  = guide_legend(byrow = TRUE),
+    shape = guide_legend(byrow = TRUE)
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots", "fig1_world_robinson_globe.png"),
+  plot = world_map_plot,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+
+```
+
+### jPacific Islands
 
 ```{r}
 
