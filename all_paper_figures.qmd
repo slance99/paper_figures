@@ -39,7 +39,6 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(scales)
 library(devtools)
-library(calecopal)
 ```
 
 ## Reading In + Cleaning Data
@@ -50,13 +49,13 @@ library(calecopal)
 #DISCHARGE
 join_dis <- read_csv(here("data","discharge_av_year_z.csv")) |>
   inner_join(
-    read_csv(here("data","all_site_data_102825.csv")) |>
+    read_csv(here("data","base_sites.csv")) |>
       select(site_name, site_lat, site_lon),   # no av_type
     by = "site_name") |>
   drop_na()
 
 #Sediment 
-join_sed = read_csv(here("data","z_score_method3.csv")) |>
+join_sed = read_csv(here("data","ssc_av_year_z.csv")) |>
   drop_na()
 
 ```
@@ -123,6 +122,50 @@ if (length(miss_idx) > 0) {
 sf_sed <- continent_joined %>%
   st_drop_geometry() %>%
   rename(country = name)
+
+```
+
+## Stats for Results
+
+### Discharge Mean + Median
+
+```{r}
+
+mean_dis <- mean(join_dis$p95_zscore)
+median_dis <- median(join_dis$p95_zscore)
+range_dis <- range(join_dis$p95_zscore)
+
+print(c('Mean Dis:', mean_dis))
+print(c('Median Dis', median_dis))
+print(c('Range Dis', range_dis))
+
+# Create Histogram of this Data
+hist(join_dis$p95_zscore, 
+     main = "Histogram of Discharge Z-Scores", 
+     xlab = "Discharge Z-Score", 
+     col = "lightblue", 
+     border = "black")
+
+```
+
+### SSC Mean + Median
+
+```{r}
+
+mean_sed <- mean(join_sed$p95_zscore)
+median_sed <- median(join_sed$p95_zscore)
+range_sed <- range(join_sed$p95_zscore)
+
+print(c('Mean SSC:', mean_sed))
+print(c('Median SSC', median_sed))
+print(c('Range SSC', range_sed))
+
+#Create Histogram of this Data
+hist(join_sed$p95_zscore, 
+     main = "Histogram of Sediment Z-Scores", 
+     xlab = "Sediment Z-Score", 
+     col = "lightgreen", 
+     border = "black")
 
 ```
 
@@ -314,7 +357,7 @@ world_map_plot <- ggplot() +
 world_map_plot
 
 ggsave(
-  filename = here("plots", "fig1_world_robinson_globe.png"),
+  filename = here("plots_2.0", "fig1_world_robinson_globe.png"),
   plot = world_map_plot,
   width = 10,
   height = 7,
@@ -333,9 +376,9 @@ ggsave(
 # -------------------------
 # Paths
 # -------------------------
-av_year_updated_path <- here("data", "z_score_method3.csv")
+av_year_updated_path <- here("data", "ssc_av_year_z.csv")
 compiled_output_path <- here("data", "time_series.csv")
-plots_dir <- "/Volumes/Crucial X6/paper_figures/rstudio/plots"
+plots_dir <- "/Volumes/Crucial X6/paper_figures/rstudio/plots_2.0"
 
 # -------------------------
 # Load data
@@ -442,8 +485,8 @@ p_ssc <- ggplot(site_df, aes(x = date, y = y_pred)) +
   } +
 
   # Time series
-  geom_point(color = "grey30", size = 0.75) +
-  geom_line(color = "grey30", linewidth = 0.75) +
+  geom_point(color = "#9bbf30", size = 0.75) +
+  geom_line(color = "#9bbf30", linewidth = 0.75) +
 
 # Red hollow circle: y = p95(window), x = date of max(window)
 { if (!is.null(p95_pt))
@@ -509,10 +552,10 @@ safe_name <- site %>%
   str_replace_all("/", "_")
 
 ggsave(
-  filename = file.path(plots_dir, paste0(safe_name, "_ssc_timeseries.png")),
+  filename = file.path(plots_dir, paste0(safe_name, "fig2_ssc_timeseries.png")),
   plot = p_ssc,
-  width = 10,
-  height = 5,
+  width = 9,
+  height = 3,
   dpi = 300
 )
 
@@ -527,7 +570,7 @@ p_ssc
 # Paths
 av_year_path  <- here("data","discharge_av_year_z.csv")
 compiled_path <- here("data", "compiled_dis24.csv")
-plots_dir     <- "/Volumes/Crucial X6/paper_figures/rstudio/plots"
+plots_dir     <- "/Volumes/Crucial X6/paper_figures/rstudio/plots_2.0"
 
 dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -632,8 +675,8 @@ p_dis <- ggplot(site_df, aes(x = valid_time, y = dis24)) +
   } +
 
   # Base line
-  geom_point(color = "grey30", size = 0.75) +
-  geom_line(color = "grey30", linewidth = 0.75) +
+  geom_point(color = "#2f6fa5", size = 0.75) +
+  geom_line(color = "#2f6fa5", linewidth = 0.75) +
 
   # Blue point: y = p95(window), x = date of max(window)
   { if (!is.null(p95_pt))
@@ -694,11 +737,11 @@ safe <- site %>%
   str_replace_all("/", "_")
 
 ggsave(
-  filename = file.path(plots_dir, paste0(safe, "_dis24_timeseries.png")),
+  filename = file.path(plots_dir, paste0(safe, "fig2_dis24_timeseries.png")),
   plot = p_dis,
-  width = 10,
-  height = 5,
-  dpi = 200
+  width = 9,
+  height = 3,
+  dpi = 300
 )
 
 # Print the plot in RStudio/Quarto
@@ -707,6 +750,171 @@ p_dis
 
 
 ```
+### Creating Time Series of Discharge and Sediment Z-Scores for Each Year 
+
+```{r}
+#Load One Site Discharge and Sediment Z-Score
+malawi_dis_zscores <- read_csv(here("data", "discharge_zscores_one_site.csv"))
+malawi_ssc_zscores <- read_csv(here("data", "ssc_zscores_one_site.csv"))
+```
+
+```{r}
+
+# Optional: select one site if present
+# site <- "MALAWI1.2014"
+# df_red  <- df_red  %>% filter(site_name == site)
+# df_blue <- df_blue %>% filter(site_name == site)
+
+# -------------------------
+# Clean + harmonize
+# -------------------------
+prep_df <- function(df, label) {
+  df %>%
+    mutate(
+      year = as.integer(year),
+      p95_zscore = as.numeric(p95_zscore),
+      dataset = label,
+      date = as.Date(paste0(year, "-01-01"))
+    ) %>%
+    filter(!is.na(year), !is.na(p95_zscore))
+}
+
+dis_red  <- prep_df(malawi_dis_zscores,  "Discharge (m^3/s)")
+ssc_blue <- prep_df(malawi_ssc_zscores, "SSC (mg/L)")
+
+df_all <- bind_rows(dis_red, ssc_blue)
+
+stopifnot(nrow(df_all) > 0)
+
+# ---- Shading window: 2013 through end of 2014 ----
+shade_df <- tibble(
+  xmin = as.Date("2013-01-01"),
+  xmax = as.Date("2014-12-31"),
+  ymin = -Inf,
+  ymax = Inf
+)
+# -------------------------
+# Marker year
+# -------------------------
+mark_year_dis <- 2014L
+mark_year_ssc <- 2013L
+
+mark_pts_dis <- df_all %>%
+  filter(dataset == "Discharge (m^3/s)", year == mark_year_dis)
+
+mark_pts_ssc <- df_all %>%
+  filter(dataset == "SSC (mg/L)", year == mark_year_ssc)
+
+# -------------------------
+# X limits
+# -------------------------
+xmin <- as.Date(paste0(min(df_all$year), "-01-01"))
+xmax <- as.Date(paste0(max(df_all$year), "-12-31"))
+
+# -------------------------
+# Plot
+# -------------------------
+p_z <- ggplot(df_all, aes(x = date, y = p95_zscore, color = dataset)) +
+  
+  { if (!is.null(shade_df))
+    geom_rect(
+      data = shade_df,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      inherit.aes = FALSE,
+      fill = "#fff7bc",
+      alpha = 0.6
+    )
+  } +
+  
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 1.8) +
+
+  { if (nrow(mark_pts_dis) > 0)
+    geom_point(
+      data = mark_pts_dis,
+      aes(x = date, y = p95_zscore),
+      inherit.aes = FALSE,
+      shape = 21,
+      size = 5,
+      stroke = 2,
+      fill = NA,
+      color = "red",
+      alpha = 0.8
+    )
+  } +
+  
+  { if (nrow(mark_pts_ssc) > 0)
+    geom_point(
+      data = mark_pts_ssc,
+      aes(x = date, y = p95_zscore),
+      inherit.aes = FALSE,
+      shape = 21,
+      size = 5,
+      stroke = 2,
+      fill = NA,
+      color = "red",
+      alpha = 0.8
+    )
+  } +
+
+  scale_color_manual(
+  values = c(
+    "Discharge (m^3/s)" = "#2f6fa5",  # deep red
+    "SSC (mg/L)"        = "#9bbf30"   # deep blue
+  )
+) +
+  guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.06))) +
+
+  scale_x_date(
+    limits = c(as.Date("1985-01-01"), as.Date("2020-12-31")),
+    breaks = seq(as.Date("1985-01-01"), as.Date("2020-01-01"), by = "5 years"),
+    labels = date_format("%Y"),
+    expand = c(0, 0)
+  ) +
+
+  labs(x = "Year", y = "Z-Score (-)") +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.2, color = "grey90"),
+
+    axis.title.y = element_text(size = 20, face = "bold", color = "grey30"),
+    axis.title.x = element_text(size = 20, face = "bold", color = "grey30"),
+
+    axis.text = element_text(size = 16, face = "bold", color = "grey30"),
+    axis.line = element_line(color = "grey30", linewidth = 1.2),
+    axis.ticks = element_line(color = "grey30", linewidth = 1.2),
+
+    legend.position = "none",
+    legend.justification = c(0.5, 1),
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 14, face = "bold", color = "grey30"),
+    legend.background = element_rect(fill = alpha("white", 0.7), colour = NA),
+    legend.key = element_rect(fill = NA, colour = NA),
+
+    plot.background = element_rect(fill = "transparent", colour = NA)
+  )
+# -------------------------
+# Save
+# -------------------------
+ggsave(
+  filename = file.path(plots_dir, "fig2_p95_zscore_two_datasets.png"),
+  plot = p_z,
+  width = 9,
+  height = 3.1,
+  dpi = 300,
+  bg = "transparent"
+)
+
+p_z
+
+```
+
 
 ## Figure 3 - Boxplots of Discharge Z-Score
 
@@ -775,7 +983,7 @@ gardner_type <- join_dis |>
 print(gardner_type)
 
 ggsave(
-  filename = here("plots", "dis_zscore_type_box.jpg"),
+  filename = here("plots_2.0", "fig3_dis_zscore_type_box.jpg"),
   plot = gardner_type,
   device = "jpg",
   height = 4, width = 8, units = "in"
@@ -852,7 +1060,7 @@ overall_dis <- join_dis |>
 overall_dis
 
 ggsave(
-  filename = here("plots", "discharge_overall_box.png"), 
+  filename = here("plots_2.0", "fig3_discharge_overall_box.png"), 
   bg = "transparent",
   plot = overall_dis, 
   device = "png",
@@ -884,7 +1092,9 @@ retro = join_sed |>
 
 
 t_fan = t.test(fan$p95_zscore, mu = 0)
+print( t_fan)
 t_delta = t.test(delta$p95_zscore, mu = 0)
+print(t_delta)
 t_il = t.test(il$p95_zscore, mu = 0)
 t_retro = t.test(retro$p95_zscore, mu = 0)
 t_all = t.test(join_sed$p95_zscore, mu = 0)
@@ -926,10 +1136,10 @@ gardner_type <- join_sed |>
 print(gardner_type)
 
 ggsave(
-  filename = here("plots", "ssc_zscore_type_box.jpg"), 
+  filename = here("plots_2.0", "fig3_ssc_zscore_type_box.jpg"), 
   plot = gardner_type, 
   device = "jpg",
-  height = 4, width = 8, units = "in"
+  height = 8, width = 8, units = "in"
 )
 
 ```
@@ -1001,7 +1211,7 @@ ssc_overall <- join_sed |>
 ssc_overall
 
 ggsave(
-  filename = here("plots", "ssc_overall_box.png"), 
+  filename = here("plots_2.0", "fig3_ssc_overall_box.png"), 
   bg = "transparent",
   plot = ssc_overall, 
   device = "png",
@@ -1077,7 +1287,7 @@ world_map_plot <- ggplot() +
 world_map_plot
 
 ggsave(
-  filename = here("plots", "world_dis_fig3.png"),
+  filename = here("plots_2.0", "supplemental_dis_map.png"),
   plot = world_map_plot,
   width = 16,
   height = 8,
@@ -1155,11 +1365,67 @@ world_map_plot <- ggplot() +
 world_map_plot
 
 ggsave(
-  filename = here("plots", "world_ssc_fig3.png"),
+  filename = here("plots_2.0", "supplemental_ssc_map.png"),
   plot = world_map_plot,
   width = 16,
   height = 8,
   units = "in",
   dpi = 300
 )
+```
+### Scatter Plot of Discharge and SSC
+
+```{r}
+
+scatter_df <- join_dis %>%
+  inner_join(
+    join_sed %>%
+      select(site_name, p95_zscore_sed = p95_zscore),by = "site_name") |>
+  filter(!is.na(p95_zscore), !is.na(p95_zscore_sed))
+
+p_scatter <- ggplot(scatter_df, aes(x = p95_zscore, y = p95_zscore_sed, color = av_type)) +
+  geom_point(
+    size = 3,
+    alpha = 0.7) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "gray30",
+    linewidth = 1.2) +
+   geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    color = "gray30",
+    linewidth = 1.2) +
+  theme_minimal() +
+  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+  labs(x = "Discharge Z-Score (-)", y = "SSC Z-Score (-)") +
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_text(color = "grey30", size = 20, face = "bold"),
+    
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    
+    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+    
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    
+    legend.position = "none",
+    
+  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+  )
+p_scatter
+
+ggsave(
+  filename = here("plots_2.0", "supplemental_scatter.png"),
+  plot = p_scatter,
+  width = 4,
+  height = 4,
+  units = "in",
+  dpi = 300
+)
+
 ```
