@@ -163,6 +163,23 @@ ssc_stats_type <- join_sed |>
 ```
 
 
+### Reading in Full Time Series Data
+
+```{r}
+
+#Load Discharge Data 
+discharge_ts <- read_csv(here("data", "vg_dis_z_all_years.csv"))
+
+```
+
+###  Pulling out 5 Years Prior to Avulsion
+
+```{r}
+pre_avulsion_5 <- discharge_ts %>%
+  filter(year >= (avulsion_year - 5) & year < avulsion_year)
+
+```
+
 ## Figure 1 - World Map with Avulsion Types
 
 ### Establishing Colors and Shapes for All Maps
@@ -1514,6 +1531,181 @@ ggsave(
 ```
 
 ## Figure 4
+
+### Leadup to Avulsions
+
+#### Log P95 Annual Discharge
+
+```{r}
+
+plot_data <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%   # 1 = one year before, 5 = five years before
+  group_by(av_type, years_before) %>%
+  summarise(mean_zlog_p95_q = mean(zlog_p95_q, na.rm = TRUE), .groups = "drop")
+
+colors <- plasma(4)
+shapes <- c(21, 22, 23, 24)
+
+p95_line <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
+                      color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = 2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = 1.2) +
+  geom_point(size = 5, stroke = 1, color = "white") +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +  # t-1 closest to avulsion on right
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.4, 0.3)) +
+  labs(
+    x = "Years Relative\nto Avulsion (years)",
+    y = "P95 Discharge\nlog Z-Score",
+    color = "Avulsion Type",
+    fill  = "Avulsion Type",
+    shape = "Avulsion Type"
+  ) +
+    theme_classic(base_size = 18) +
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.title.x = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    axis.text.x  = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    legend.position = "none",
+    plot.background = element_rect(fill = "transparent", colour = NA),
+    plot.margin     = margin(5, 8, 5, 8)
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig4_p95_line.png"),
+  plot     = p95_line,
+  width    = 4,
+  height   = 4.5,
+  dpi      = 300,
+  bg       = "transparent"
+)
+
+```
+
+#### Log Mean Annual Discharge 
+
+```{r}
+
+plot_data1 <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%   # 1 = one year before, 5 = five years before
+  group_by(av_type, years_before) %>%
+  summarise(mean_zlog_mean_q = mean(zlog_mean_q, na.rm = TRUE), .groups = "drop")
+
+colors <- plasma(4)
+shapes <- c(21, 22, 23, 24)
+
+mean_line <- ggplot(plot_data1, aes(x = years_before, y = mean_zlog_mean_q,
+                      color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = 2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = 1.2) +
+  geom_point(size = 5, stroke = 1, color = "white") +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +  # t-1 closest to avulsion on right
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.4, 0.3)) +
+  labs(
+    x = "Years Relative\nto Avulsion (years)",
+    y = "Mean Discharge\nlog Z-Score",
+    color = "Avulsion Type",
+    fill  = "Avulsion Type",
+    shape = "Avulsion Type"
+  ) +
+    theme_classic(base_size = 18) +
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.title.x = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    axis.text.x  = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    legend.position = "none",
+    plot.background = element_rect(fill = "transparent", colour = NA),
+    plot.margin     = margin(5, 8, 5, 8)
+  )
+
+mean_line
+
+ggsave(
+  filename = file.path(plots_dir, "fig4_mean_line.png"),
+  plot     = mean_line,
+  width    = 4,
+  height   = 4.5,
+  dpi      = 300,
+  bg       = "transparent"
+)
+
+```
+
+#### Log Mean Annual Discharge 
+
+```{r}
+
+plot_data2 <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%   # 1 = one year before, 5 = five years before
+  group_by(av_type, years_before) %>%
+  summarise(mean_zlog_flood_dur = mean(zlog_flood_dur, na.rm = TRUE), .groups = "drop")
+
+colors <- plasma(4)
+shapes <- c(21, 22, 23, 24)
+
+flooddur_line <- ggplot(plot_data2, aes(x = years_before, y = mean_zlog_flood_dur,
+                      color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = 2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = 1.2) +
+  geom_point(size = 5, stroke = 1, color = "white") +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +  # t-1 closest to avulsion on right
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.4, 0.3)) +
+  labs(
+    x = "Years Relative\nto Avulsion (years)",
+    y = "Mean Flood Duration\nlog Z-Score",
+    color = "Avulsion Type",
+    fill  = "Avulsion Type",
+    shape = "Avulsion Type"
+  ) +
+    theme_classic(base_size = 18) +
+  theme(
+    axis.title.y = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.title.x = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+    axis.text.x  = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.text.y = element_text(color = "grey30", size = 15, face = "bold"),
+    axis.ticks.y = element_line(color = "grey30", size = 1.2),
+    axis.ticks.x = element_line(color = "grey30", size = 1.2),
+    legend.position = "none",
+    plot.background = element_rect(fill = "transparent", colour = NA),
+    plot.margin     = margin(5, 8, 5, 8)
+  )
+
+flooddur_line
+
+ggsave(
+  filename = file.path(plots_dir, "fig4_flooddur.png"),
+  plot     = flooddur_line,
+  width    = 4,
+  height   = 4.5,
+  dpi      = 300,
+  bg       = "transparent"
+)
+
+```
+#### Combined
+
+```{r}
+```
 
 ### Lineplot Stack
 
