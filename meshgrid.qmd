@@ -1,0 +1,748 @@
+---
+title: "Avulsion Project Code"
+description: "Analysis of Movement Winter 2026"
+author: "Sam Lance"
+format:
+  html:
+    code-fold: true
+    toc: true
+    number-sections: true
+    embed-resources: true
+    theme: Lux
+editor: visual
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+library(sf)
+library(dplyr)
+library(spdep)
+library(ggplot2)
+library(janitor)
+library(tidyverse)
+library(here)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(scales)
+library(RColorBrewer)
+library(ggnewscale)
+library(terra)
+library(tidyterra)
+library(spatialreg)
+library(ggrepel)
+```
+
+## Setup 
+### Load Data 
+```{r}
+
+#Load Data in OG Format No Modifications 
+site_xy_og <- read_csv(here("data","base_sites.csv"), show_col_types = FALSE) 
+dis_z <- read_csv(here("data","discharge_av_year_z.csv"), show_col_types = FALSE)
+sed_z <- read_csv(here("data","ssc_av_year_z.csv"), show_col_types = FALSE)
+
+#Load Avulsion Data
+site_xy <- read_csv(here("data","base_sites.csv"), show_col_types = FALSE) |>
+  select(site_name, site_lat, site_lon) |>
+  distinct() |>
+  drop_na()
+
+#Load Discharge Z-Score Data + Convert to SF Object 
+avulsion_sf <- read_csv(here("data","discharge_av_year_z.csv"), show_col_types = FALSE) |>
+  inner_join(site_xy, by = "site_name") |> #need lat lon from xy data, so join 
+  drop_na(p95_zscore, site_lat, site_lon) |> #get rid of NA values 
+  st_as_sf(coords = c("site_lon","site_lat"), crs = 4326)
+
+```
+
+### Create Region List 
+
+```{r}
+
+#Select Specific Regions 
+regions <- list(
+  "Northern South America" = c(xmin = -82, ymin =  -5, xmax = -55, ymax =  15),
+  "Southern South America" = c(xmin = -82, ymin = -60, xmax = -55, ymax =  -5),
+  "Himalaya"               = c(xmin =  72, ymin =  20, xmax = 108, ymax =  32),
+  "PNG North"              = c(xmin =  130, ymin =  -15, xmax = 150, ymax =  5))
+
+region_names <- names(regions)  # c("Northern South America", "Southern South America", ...)
+ 
+#Convert into Polygon 
+region_polys <- imap(regions, function(bb, name) {
+  st_sf(
+    region = name,
+    geometry = st_sfc(st_polygon(list(
+      matrix(c(bb["xmin"], bb["ymin"],
+               bb["xmax"], bb["ymin"],
+               bb["xmax"], bb["ymax"],
+               bb["xmin"], bb["ymax"],
+               bb["xmin"], bb["ymin"]),
+             ncol = 2, byrow = TRUE))), crs = 4326)
+  )
+}) |> bind_rows()
+
+```
+
+
+### Reproject to World Mollweide 
+
+Reason: want equal area CRS
+```{r}
+# Load world boundaries and project to match your points
+world_wgs84 <- ne_countries(scale = "medium", returnclass = "sf")
+
+target_crs <- "+proj=moll"   # World Mollweide (metres)
+ 
+avulsion_proj  <- st_transform(avulsion_sf,   crs = target_crs)
+region_proj    <- st_transform(region_polys,  crs = target_crs)
+world_proj     <- st_transform(world_wgs84,   crs = target_crs)
+
+```
+
+### Info on Neighbor Distances
+
+Commented out because only need to run once, meant to show what the distances look like between neighbors to select the value for the next chunk
+```{r}
+
+# for (region_name in names(regions)) {
+# 
+#   region_boundary <- region_proj |> filter(region == region_name)
+#   pts_diag <- st_intersection(avulsion_proj, region_boundary)
+# 
+#   if (nrow(pts_diag) < 2) {
+#     cat(sprintf("[%s] Too few points for distance diagnostic\n", region_name))
+#     next
+#   }
+# 
+#   coords <- st_coordinates(pts_diag)
+#   dist_matrix <- as.matrix(dist(coords))
+#   diag(dist_matrix) <- NA
+# 
+#   nn_dist_km <- apply(dist_matrix, 1, min, na.rm = TRUE) / 1000
+# 
+#   cat(sprintf("\n[%s] — %d points\n", region_name, nrow(pts_diag)))
+#   cat(sprintf("  Min NN distance:    %.0f km\n", min(nn_dist_km)))
+#   cat(sprintf("  Median NN distance: %.0f km\n", median(nn_dist_km)))
+#   cat(sprintf("  Mean NN distance:   %.0f km\n", mean(nn_dist_km)))
+#   cat(sprintf("  Max NN distance:    %.0f km\n", max(nn_dist_km)))
+#   cat(sprintf("  Suggested cell size (median × 1.5): %.0f km\n",
+#               median(nn_dist_km) * 1.5))
+# }
+# 
+# stop("Diagnostic complete — review suggested cell sizes above,
+#       then set cell_size_km and run the full script.")
+
+```
+
+## Building Spatial Weights Matrix
+
+### Build Spatial Weights by Region 
+```{r}
+#Defines the Grid Cell
+cell_size_km <- 25  #value is taken from the chunk above      
+cell_size_m  <- cell_size_km * 1000 #put into meters 
+ 
+build_region_weights <- function(region_name, points_proj, regions_proj, cell_km) {
+ 
+  cell_m <- cell_km * 1000 #convert to meters 
+ 
+  #Pick out Region Points 
+  region_boundary <- regions_proj |> filter(region == region_name) #just pick out one region as running 
+  pts <- st_intersection(points_proj, region_boundary) #clips only points within the region 
+ 
+  #Error Statement: print out if there are no points found in a region, and print out how many points were found in each region 
+  if (nrow(pts) == 0) {
+    warning(paste("No points found in region:", region_name))
+    return(NULL)
+  }
+  cat(sprintf("\n[%s] %d points\n", region_name, nrow(pts)))
+ 
+  #Creates Bounding Box 
+  bb <- st_bbox(region_boundary)
+  x_breaks <- seq(floor(bb["xmin"] / cell_m) * cell_m,
+                  ceiling(bb["xmax"] / cell_m) * cell_m,
+                  by = cell_m)
+  y_breaks <- seq(floor(bb["ymin"] / cell_m) * cell_m,
+                  ceiling(bb["ymax"] / cell_m) * cell_m,
+                  by = cell_m)
+ 
+  cat(sprintf("  Grid: %d x-cells × %d y-cells at %d km\n",
+              length(x_breaks) - 1, length(y_breaks) - 1, cell_km))
+ 
+  #Assign Set ID 
+  coords <- st_coordinates(pts)
+  pts <- pts |>
+    mutate(
+      
+      #Pull X and Y Values 
+      x_m     = coords[, 1],
+      y_m     = coords[, 2],
+      
+      #Finds What Grid Column and Row Each Point is In 
+      col_idx = findInterval(x_m, x_breaks, rightmost.closed = TRUE),
+      row_idx = findInterval(y_m, y_breaks, rightmost.closed = TRUE),
+      cell_id = paste0("r", row_idx, "_c", col_idx)
+    )
+ 
+  cat(sprintf("  Occupied cells: %d\n", n_distinct(pts$cell_id)))
+ 
+  #Count Number of Neighbros for Each 
+  cell_ids       <- pts$cell_id #pull cell id values 
+  n              <- nrow(pts)
+  neighbor_counts <- table(table(cell_ids) - 1)  #number of neighbors each point has 
+  print(neighbor_counts) #print these values 
+ 
+  #INITIAL Build Neighbor List 
+  #For each point finds all other points int he same cell, binary 0 or 1 neighbors 
+  nb_list <- lapply(seq_len(n), function(i) { 
+    same_cell <- which(cell_ids == cell_ids[i]) #identifies which one is itself 
+    as.integer(same_cell[same_cell != i])
+  })
+  class(nb_list) <- "nb" #tells sbdep this is a neighbors list 
+  attr(nb_list, "region.id") <- as.character(seq_len(n)) #labels each pointt by index AKA 1, 2, etc. 
+  attr(nb_list, "call")      <- call("build_region_weights") #
+  attr(nb_list, "sym")       <- FALSE #just in case neighbors not symmetric 
+ 
+  #Finds Isolated Points 
+  n_isolated <- sum(sapply(nb_list, length) == 0) #finds neighbor count for each point, finds all zeroes to see which points are isolated 
+  cat(sprintf("  Isolated points (no neighbour): %d / %d\n", n_isolated, n))
+ 
+ #CLEAN Fix for No Neighbors
+  nb_list_clean <- lapply(nb_list, function(x) {
+    if (length(x) == 0) 0L else x #put in OL as the length instead of 0 so spdep does not freak out
+  })
+  
+  class(nb_list_clean) <- "nb"
+  attr(nb_list_clean, "region.id") <- as.character(seq_len(n))
+  attr(nb_list_clean, "call")      <- call("build_region_weights")
+  attr(nb_list_clean, "sym")       <- FALSE
+
+  #Build Spatial Weights 
+  #W = row standardized, weights are divided by number of neighbors 
+  lw <- tryCatch({
+    nb2listw(nb_list_clean, style = "W", zero.policy = TRUE) #zero policy to allow for points with no neighbors to pass through 
+  }, error = function(e) {
+    cat(sprintf("  ERROR building weights for %s: %s\n", region_name, e$message))
+    NULL
+  })
+ 
+  #Creats a Named List to Access Everything at the End 
+  list(
+    region      = region_name,
+    points      = pts,
+    nb          = nb_list_clean,
+    lw          = lw,
+    x_breaks    = x_breaks,
+    y_breaks    = y_breaks
+  )
+}
+```
+
+### Run for All Regions 
+
+```{r}
+
+#Running the Above Code 
+results <- imap(
+  setNames(names(regions), names(regions)), #extracts names from regions, creates named vector, .x is region name string  
+  ~ build_region_weights(.x, avulsion_proj, region_proj, cell_size_km) #running function above, .x is region name string
+) |> compact()   #drop empty regions 
+ 
+#Printing Completion Statment 
+cat("\nSuccessfully built weights for:", paste(names(results), collapse = ", "), "\n")
+
+```
+
+### Save All Weights
+
+```{r}
+#Save all Weights as a RDS File 
+#RDS File: R specific object
+for (reg in names(results)) { #loops over each region that came out of the last section 
+  if (!is.null(results[[reg]]$lw)) { #if not null, access the lw object for each region 
+    filename <- paste0("weights_", gsub(" ", "_", tolower(reg)), ".rds") #filename setup 
+    saveRDS(results[[reg]]$lw, filename) #save as an rds file 
+    cat("Saved:", filename, "\n") #progress printout 
+  }
+}
+
+```
+
+## Spatial Statistics 
+### Function for Spatial Stats  
+
+```{r}
+
+run_spatial_stats <- function(res) {
+ 
+  if (is.null(res) || is.null(res[["lw"]])) {
+    cat(sprintf("[%s] Skipping — no weights object\n", res$region))
+    return(NULL)
+  }
+ 
+  pts          <- res$points
+  lw           <- res$lw
+  analysis_var <- pts$p95_zscore
+  cat(sprintf("\n========== %s ==========\n", res$region))
+ 
+  #Global Moran's I
+  moran_result <- moran.test(analysis_var, lw, zero.policy = TRUE)
+  cat("Global Moran's I:\n")
+  print(moran_result)
+ 
+  #Gi*
+  nb_self  <- include.self(res$nb)
+  lw_self  <- nb2listw(nb_self, style = "B", zero.policy = TRUE)
+  gi_star  <- localG(analysis_var, lw_self, zero.policy = TRUE)
+ 
+  pts$gi_star     <- as.numeric(gi_star)
+  pts$gi_star_sig <- abs(pts$gi_star) > 1.96
+ 
+  #LISA
+  lisa_result  <- localmoran(analysis_var, lw, zero.policy = TRUE, na.action = na.omit)
+  pts$lisa_Ii  <- lisa_result[, "Ii"]
+  pts$lisa_p   <- lisa_result[, "Pr(z != E(Ii))"]
+  pts$lisa_sig <- pts$lisa_p < 0.05
+ 
+  z_var <- scale(analysis_var)[, 1]
+  z_lag <- lag.listw(lw, z_var, zero.policy = TRUE)
+ 
+  pts$lisa_quad <- case_when(
+    z_var > 0 & z_lag > 0 & pts$lisa_sig ~ "HH",
+    z_var > 0 & z_lag < 0 & pts$lisa_sig ~ "HL",
+    z_var < 0 & z_lag > 0 & pts$lisa_sig ~ "LH",
+    z_var < 0 & z_lag < 0 & pts$lisa_sig ~ "LL",
+    TRUE ~ "Not significant"
+  )
+ 
+  cat("LISA quadrant counts:\n")
+  print(table(pts$lisa_quad))
+
+  #Print GI Star
+  cat("\nSignificant Gi* sites (|Z| > 1.96):\n")
+  gi_sig_sites <- pts |>
+    st_drop_geometry() |>
+    filter(gi_star_sig == TRUE) |>
+    arrange(desc(gi_star)) |>
+    select(site_name, gi_star) |>
+    mutate(type = ifelse(gi_star > 0, "Hot spot", "Cold spot"))
+  
+  if (nrow(gi_sig_sites) == 0) {
+    cat("  No significant Gi* sites\n")
+  } else {
+    print(gi_sig_sites)
+  }
+
+  #Print LISA Clusters
+  cat("\nSignificant LISA sites (p < 0.05):\n")
+  lisa_sig_sites <- pts |>
+    st_drop_geometry() |>
+    filter(lisa_sig == TRUE) |>
+    arrange(lisa_quad, desc(abs(lisa_Ii))) |>
+    select(site_name, lisa_quad, lisa_Ii, lisa_p)
+  
+  if (nrow(lisa_sig_sites) == 0) {
+    cat("  No significant LISA sites\n")
+  } else {
+    print(lisa_sig_sites)
+  }
+ 
+  list(region = res$region, points = pts, moran = moran_result)
+}
+ 
+cat("\nResults structure check:\n")
+for (reg in names(results)) {
+  cat(sprintf("  %s — lw present: %s\n", reg, !is.null(results[[reg]]$lw)))
+}
+
+```
+### Run Spatial Stats 
+```{r}
+
+#Run the Function
+stats_results <- map(results, function(res) {
+  if (is.null(res)) return(NULL)
+  run_spatial_stats(res)
+}) |> compact()
+```
+
+### Create Maps 
+
+```{r}
+#Setting up Colors 
+quad_colours <- c("HH" = "#d7191c", "HL" = "#fdae61",
+                  "LH" = "#abd9e9", "LL" = "#2c7bb6",
+                  "Not significant" = "grey80")
+
+#Looping Through Each Region and Each Process 
+for (res in stats_results) {
+
+  pts         <- res$points
+  region_name <- res$region
+
+  # Gi* map — significant points only
+  pts_sig <- pts |> filter(abs(gi_star) > 1.96)
+
+  p_gi <- ggplot() +
+    geom_sf(data = world_proj, fill = "grey85", colour = "white", linewidth = 0.2) +
+    geom_sf(data = pts_sig, aes(colour = gi_star), size = 2.5, alpha = 0.9) +
+    scale_colour_gradient2(low = "blue", mid = "white", high = "red",
+                           midpoint = 0, name = "Gi* Z-score") +
+    coord_sf(xlim = st_bbox(pts)[c("xmin","xmax")],
+             ylim = st_bbox(pts)[c("ymin","ymax")],
+             expand = TRUE) +
+    labs(title = paste(region_name, "— Getis-Ord Gi*"),
+         subtitle = "Significant clusters only (|Z| > 1.96, p < 0.05)",
+         x = NULL, y = NULL) +
+    theme_minimal()
+  print(p_gi)
+
+  # LISA map
+  p_lisa <- ggplot() +
+    geom_sf(data = world_proj, fill = "grey85", colour = "white", linewidth = 0.2) +
+    geom_sf(data = pts, aes(colour = lisa_quad), size = 2.5, alpha = 0.9) +
+    scale_colour_manual(values = quad_colours, name = "LISA Cluster") +
+    coord_sf(xlim = st_bbox(pts)[c("xmin","xmax")],
+             ylim = st_bbox(pts)[c("ymin","ymax")],
+             expand = TRUE) +
+    labs(title = paste(region_name, "— LISA Clusters"),
+         subtitle = "Local Moran's I, p < 0.05",
+         x = NULL, y = NULL) +
+    theme_minimal()
+  print(p_lisa)
+}
+
+```
+
+### Plotting the Regions
+
+```{r}
+# ── Projections ──────────────────────────────────────────────────────────────
+crs_robin <- "+proj=robin +lon_0=0 +datum=WGS84 +units=m +no_defs"
+
+# ── Base geodata ─────────────────────────────────────────────────────────────
+world_wgs84 <- ne_countries(scale = "medium", returnclass = "sf")
+
+# ── Globe outline (bounding box → Robinson) ───────────────────────────────────
+globe_outline <- st_as_sfc(
+  st_bbox(c(xmin = -180, ymin = -90, xmax = 180, ymax = 90),
+          crs = st_crs(4326))
+) |>
+  st_transform(crs_robin)
+
+# ── Graticule ────────────────────────────────────────────────────────────────
+grat <- st_graticule(
+  lon = seq(-180, 180, by = 60),
+  lat = seq(-60,   60, by = 30),
+  crs = st_crs(4326)
+) |>
+  st_transform(crs_robin)
+
+# ── Top / bottom boundary lines ───────────────────────────────────────────────
+lon_seq <- seq(-180, 180, by = 0.25)
+
+make_parallel <- function(lat) {
+  st_sfc(
+    st_linestring(cbind(lon_seq, rep(lat, length(lon_seq)))),
+    crs = 4326
+  ) |>
+    st_transform(crs_robin)
+}
+
+bottom_boundary <- make_parallel(-90)
+top_boundary    <- make_parallel( 90)
+
+# ── Project your data layers to Robinson ─────────────────────────────────────
+# (avulsion_sf and region_polys are assumed to be in WGS84 / EPSG:4326)
+avulsion_robin  <- st_transform(avulsion_sf,  crs_robin)
+region_robin    <- st_transform(region_polys, crs_robin)
+
+# ── Region label centroids (in Robinson space) ────────────────────────────────
+region_labels <- region_robin |>
+  mutate(
+    lon = map_dbl(geometry, ~ st_centroid(.)[[1]]),
+    lat = map_dbl(geometry, ~ st_centroid(.)[[2]])
+  )
+
+p_overview <- ggplot() +
+
+  # Graticule behind everything
+  geom_sf(data = grat,
+          color = "grey70", linewidth = 0.25) +
+
+  # Continents
+  geom_sf(data = world_wgs84,
+          fill = "grey75", colour = "grey60", linewidth = 0.2) +
+
+  # Study-region polygons
+  geom_sf(data = region_robin,
+          fill = "steelblue", alpha = 0.15,
+          colour = "steelblue", linewidth = 0.6) +
+
+  # Avulsion points coloured by p95_zscore
+  geom_sf(data = avulsion_robin,
+          aes(colour = p95_zscore),
+          size = 2, alpha = 0.85) +
+
+  # Top / bottom boundary arcs
+  geom_sf(data = bottom_boundary, color = "grey70", linewidth = 0.7) +
+  geom_sf(data = top_boundary,    color = "grey70", linewidth = 0.7) +
+
+  # Globe frame
+  geom_sf(data = globe_outline,
+          fill = NA, colour = "grey70", linewidth = 0.7) +
+
+  # Region labels — increased size 3 → 5
+  geom_label_repel(
+    data        = region_labels,
+    aes(x = lon, y = lat, label = region),
+    size        = 5,          # ← was 3
+    fill        = "white",
+    alpha       = 0.85,
+    label.size  = 0.2,
+    box.padding = 0.4,
+    seed        = 42
+  ) +
+
+  # Colour scale
+  scale_colour_viridis_c(option = "plasma", name = "p95 Z-score") +
+
+  # Robinson CRS
+  coord_sf(crs = crs_robin, expand = FALSE) +
+
+  labs(title = "Avulsion Points – Study Regions") +
+
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.title        = element_blank(),
+    axis.text         = element_blank(),
+    axis.ticks        = element_blank(),
+    panel.grid.major  = element_blank(),
+    panel.grid.minor  = element_blank(),
+    plot.background   = element_rect(fill = "white", color = NA),
+    panel.background  = element_rect(fill = "white", color = NA),
+    plot.title        = element_text(face = "bold", hjust = 0.5),
+
+    legend.position   = c(0.08, 0.25),
+    legend.direction  = "vertical",
+    legend.title      = element_text(face = "bold", size = 14),  # ← was 9
+    legend.text       = element_text(size = 13),                 # ← was 8
+    legend.background = element_rect(fill = "white", colour = "white"),
+    legend.key.height = unit(1.8, "lines"),                      # ← was 0.6 (taller bar)
+    legend.key.width  = unit(1.5, "lines")                       # ← new (wider bar)
+  ) +
+
+  guides(
+    colour = guide_colorbar(
+      barheight    = unit(5, "cm"),   # ← taller colour bar
+      barwidth     = unit(0.6, "cm"), # ← wider colour bar
+      title.hjust  = 0.5
+    )
+  )
+
+print(p_overview)
+
+ggsave(
+  filename = here("plots_2.0", "study_regions_meshgrid.png"),
+  plot = p_overview,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+
+```
+
+```{r}
+
+# ── Combine all regions into one sf object ────────────────────────────────────
+all_pts <- bind_rows(
+  lapply(stats_results, function(res) {
+    res$points |> mutate(region = res$region)
+  })
+)
+
+# ── Project to Robinson ───────────────────────────────────────────────────────
+all_pts_robin <- st_transform(all_pts, crs_robin)
+
+# ── Colours ───────────────────────────────────────────────────────────────────
+quad_colours <- c(
+  "HH"              = "#d7191c",
+  "HL"              = "#fdae61",
+  "LH"              = "#abd9e9",
+  "LL"              = "#2c7bb6",
+  "Not significant" = "black"    # overridden by alpha below
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LISA World Map
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Split into significant and not-significant
+lisa_sig    <- all_pts_robin |> filter(lisa_quad != "Not significant")
+lisa_nonsig <- all_pts_robin |> filter(lisa_quad == "Not significant")
+
+p_lisa_world <- ggplot() +
+
+  geom_sf(data = grat,
+          color = "grey70", linewidth = 0.25) +
+
+  geom_sf(data = world_wgs84,
+          fill = "grey75", colour = "grey60", linewidth = 0.2) +
+
+  # Non-significant points: black, high transparency
+  geom_sf(data = lisa_nonsig,
+          colour = "black", fill = "black",
+          size = 3, alpha = 0.45, shape = 16) +
+
+  # Significant points: quad colours, fully visible
+  geom_sf(data = lisa_sig,
+          aes(colour = lisa_quad),
+          size = 3, alpha = 0.9, shape = 16) +
+
+  geom_sf(data = bottom_boundary, color = "grey70", linewidth = 0.7) +
+  geom_sf(data = top_boundary,    color = "grey70", linewidth = 0.7) +
+
+  geom_sf(data = globe_outline,
+          fill = NA, colour = "grey70", linewidth = 0.7) +
+
+  scale_colour_manual(
+    values = c(
+      "HH" = "#d7191c",
+      "HL" = "#fdae61",
+      "LH" = "#abd9e9",
+      "LL" = "#2c7bb6"
+    ),
+    name   = "LISA Cluster",
+    drop   = FALSE
+  ) +
+
+  coord_sf(crs = crs_robin, expand = FALSE) +
+
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.title        = element_blank(),
+    axis.text         = element_blank(),
+    axis.ticks        = element_blank(),
+    panel.grid.major  = element_blank(),
+    panel.grid.minor  = element_blank(),
+    plot.background   = element_rect(fill = "white", color = NA),
+    panel.background  = element_rect(fill = "white", color = NA),
+    plot.title        = element_text(face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle     = element_text(hjust = 0.5, size = 11, color = "grey40"),
+    legend.position   = c(0.08, 0.25),
+    legend.direction  = "vertical",
+    legend.title      = element_text(face = "bold", size = 14),
+    legend.text       = element_text(size = 13),
+    legend.background = element_rect(fill = "white", colour = "white"),
+    legend.key.height = unit(1.8, "lines"),
+    legend.key.width  = unit(1.5, "lines")
+  ) +
+
+  guides(
+    colour = guide_legend(
+      override.aes = list(size = 4, alpha = 0.9)
+    )
+  )
+
+print(p_lisa_world)
+
+ggsave(
+  filename = here("plots_2.0", "lisa_world_meshgrid.png"),
+  plot = p_lisa_world,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gi* World Map
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Split significant vs not (|Z| > 1.96)
+gi_sig    <- all_pts_robin |> filter(abs(gi_star) > 1.96)
+gi_nonsig <- all_pts_robin |> filter(abs(gi_star) <= 1.96)
+
+p_gi_world <- ggplot() +
+
+  geom_sf(data = grat,
+          color = "grey70", linewidth = 0.25) +
+
+  geom_sf(data = world_wgs84,
+          fill = "grey75", colour = "grey60", linewidth = 0.2) +
+
+  # Non-significant: black, high transparency
+  geom_sf(data = gi_nonsig,
+          colour = "black", fill = "black",
+          size = 3, alpha = 0.45, shape = 16) +
+
+  # Significant: blue–white–red diverging scale
+  geom_sf(data = gi_sig,
+          aes(colour = gi_star),
+          size = 3, alpha = 0.9, shape = 16) +
+
+  geom_sf(data = bottom_boundary, color = "grey70", linewidth = 0.7) +
+  geom_sf(data = top_boundary,    color = "grey70", linewidth = 0.7) +
+
+  geom_sf(data = globe_outline,
+          fill = NA, colour = "grey70", linewidth = 0.7) +
+
+  scale_colour_gradient2(
+    low      = "blue",
+    mid      = "white",
+    high     = "red",
+    midpoint = 0,
+    name     = "Gi* Z-score"
+  ) +
+
+  coord_sf(crs = crs_robin, expand = FALSE) +
+
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.title        = element_blank(),
+    axis.text         = element_blank(),
+    axis.ticks        = element_blank(),
+    panel.grid.major  = element_blank(),
+    panel.grid.minor  = element_blank(),
+    plot.background   = element_rect(fill = "white", color = NA),
+    panel.background  = element_rect(fill = "white", color = NA),
+    plot.title        = element_text(face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle     = element_text(hjust = 0.5, size = 11, color = "grey40"),
+    legend.position   = c(0.08, 0.25),
+    legend.direction  = "vertical",
+    legend.title      = element_text(face = "bold", size = 14),
+    legend.text       = element_text(size = 13),
+    legend.background = element_rect(fill = "white", colour = "white"),
+    legend.key.height = unit(1.8, "lines"),
+    legend.key.width  = unit(1.5, "lines")
+  ) +
+
+  guides(
+    colour = guide_colorbar(
+      barheight   = unit(5, "cm"),
+      barwidth    = unit(0.6, "cm"),
+      title.hjust = 0.5
+    )
+  )
+
+print(p_gi_world)
+
+ggsave(
+  filename = here("plots_2.0", "gi_world_meshgrid.png"),
+  plot = p_gi_world,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+
+# ── Optional saves ────────────────────────────────────────────────────────────
+# ggsave("fig_lisa_world.png",   p_lisa_world, width = 10, height = 7, dpi = 300)
+# ggsave("fig_gi_star_world.png", p_gi_world,  width = 10, height = 7, dpi = 300)
+
+```
