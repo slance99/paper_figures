@@ -39,6 +39,8 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(scales)
 library(devtools)
+library(janitor)
+library(svglite)
 ```
 
 ## Reading In + Cleaning Data
@@ -188,16 +190,25 @@ pre_avulsion_5 <- discharge_ts %>%
 #Loading in World Map Data
 world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
-#Establish Legend Breaks, Colors, and Desired Shapes
-colors <- plasma(4)
-rev_colors <- colors
-shapes <- c(21, 22, 23, 24)
+colors <- c(
+  "delta"             = "#0D0887FF",
+  "fan"               = "#CC4678FF",
+  "intra-lobe"        = "#F89441FF",
+  "retrogradational"  = "#F0F921FF"
+)
+
+shapes <- c(
+  "delta"             = 21,
+  "fan"               = 22,
+  "intra-lobe"        = 23,
+  "retrogradational"  = 24
+)
 
 #devtools::install_github("an-bui/calecopal")# filled shapes
-# breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
-# colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
-# rev_colors <- rev(colors)  # Reverse the color order
-# shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
+breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
+colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
+rev_colors <- rev(colors)  # Reverse the color order
+shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
 
 ```
 
@@ -330,8 +341,8 @@ world_map_plot <- ggplot() +
   ) +
 
   # Scales
-  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
-  scale_fill_manual(name = "Avulsion Type", values = av_type_colors) +
+  scale_color_manual(name = "Avulsion Type", values = colors) +
+  scale_fill_manual(name = "Avulsion Type", values = colors) +
   scale_shape_manual(name = "Avulsion Type", values = shapes) +
 
   # Robinson projection
@@ -368,10 +379,11 @@ world_map_plot <- ggplot() +
 world_map_plot
 
 ggsave(
-  filename = here("plots_2.0", "fig1_world_robinson_globe.png"),
+  filename = here("plots_svg", "fig1_world_robinson_globe.svg"),
   plot = world_map_plot,
   width = 10,
   height = 7,
+  device = svglite, 
   units = "in",
   dpi = 300
 )
@@ -389,7 +401,7 @@ ggsave(
 # -------------------------
 av_year_updated_path <- here("data", "ssc_av_year_z.csv")
 compiled_output_path <- here("data", "time_series.csv")
-plots_dir <- "/Volumes/Crucial X6/paper_figures/rstudio/plots_2.0"
+plots_dir <- "/Volumes/Crucial X6/paper_figures/rstudio/plots_svg"
 
 # -------------------------
 # Load data
@@ -400,6 +412,7 @@ compiled <- read_csv(compiled_output_path, show_col_types = FALSE)
 compiled <- compiled %>%
   mutate(date = as.Date(date))
 
+
 # -------------------------
 # SELECT ONE SITE HERE
 # -------------------------
@@ -408,6 +421,12 @@ site <- "MALAWI1.2014"
 site_df <- compiled %>%
   filter(site_name == site) %>%
   arrange(date)
+
+# Check for NAs in your relevant columns
+sum(is.na(site_df$y_pred))
+
+# Check if any points fall outside your axis range
+df |> filter(y < your_lower_limit | y > your_upper_limit)
 
 stopifnot(nrow(site_df) > 0)
 
@@ -563,9 +582,10 @@ safe_name <- site %>%
   str_replace_all("/", "_")
 
 ggsave(
-  filename = file.path(plots_dir, paste0(safe_name, "fig2_ssc_timeseries.png")),
+  filename = file.path(plots_dir, "fig2_ssc_timeseries.svg"),
   plot = p_ssc,
   width = 9,
+  device = svglite,
   height = 3,
   dpi = 300
 )
@@ -581,7 +601,6 @@ p_ssc
 # Paths
 av_year_path  <- here("data","discharge_av_year_z.csv")
 compiled_path <- here("data", "compiled_dis24.csv")
-plots_dir     <- "/Volumes/Crucial X6/paper_figures/rstudio/plots_2.0"
 
 dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -748,9 +767,10 @@ safe <- site %>%
   str_replace_all("/", "_")
 
 ggsave(
-  filename = file.path(plots_dir, paste0(safe, "fig2_dis24_timeseries.png")),
+  filename = file.path(plots_dir, "fig2_dis24_timeseries.svg"),
   plot = p_dis,
   width = 9,
+  device = svglite,
   height = 3,
   dpi = 300
 )
@@ -915,10 +935,11 @@ p_z <- ggplot(df_all, aes(x = date, y = zlog_p95_q, color = dataset)) +
 # Save
 # -------------------------
 ggsave(
-  filename = file.path(plots_dir, "fig2_zlog_p95_q_two_datasets.png"),
+  filename = file.path(plots_dir, "fig2_log_zscore.svg"),
   plot = p_z,
   width = 9,
   height = 3.1,
+  device = svglite,
   dpi = 300,
   bg = "transparent"
 )
@@ -1075,10 +1096,10 @@ p_combined <- plot_data |>
 print(p_combined)
 
 ggsave(
-  filename = here("plots_2.0", "fig3_log95.png"),
+  filename = here("plots_svg", "fig3_95.svg"),
   plot     = p_combined,
   bg       = "transparent",
-  device   = "png",
+  device   = svglite,
   height   = 4, width = 6, units = "in"
 )
 
@@ -1240,10 +1261,10 @@ p_combined <- plot_data |>
 print(p_combined)
 
 ggsave(
-  filename = here("plots_2.0", "fig3_logmean.png"),
+  filename = here("plots_svg", "fig3_mean.svg"),
   plot     = p_combined,
   bg       = "transparent",
-  device   = "png",
+  device   = svglite,
   height   = 4, width = 6, units = "in"
 )
 ```
@@ -1403,10 +1424,10 @@ p_combined <- plot_data |>
 print(p_combined)
 
 ggsave(
-  filename = here("plots_2.0", "fig3_logdur.png"),
+  filename = here("plots_svg", "fig3_dur.svg"),
   plot     = p_combined,
   bg       = "transparent",
-  device   = "png",
+  device   = svglite,
   height   = 4, width = 6, units = "in"
 )
 
@@ -1472,7 +1493,8 @@ ssc_overall <- plot_data |>
   geom_boxplot(
     width = 0.35,
     alpha = 0.6,
-    outlier.shape = NA
+    outlier.shape = NA,
+    color = "grey30"  # box outline hardcoded, not from scale
   ) +
   # zero reference
   geom_hline(
@@ -1499,7 +1521,7 @@ ssc_overall <- plot_data |>
     fontface = "bold"
   ) +
   scale_fill_manual(values  = c("log P95 SSC Z (-)" = "grey70", "log Mean SSC Z (-)" = "grey40")) +
-  scale_color_manual(values = c("log P95 SSC Z (-)" = "grey40", "log Mean SSC Z (-)" = "grey40")) +
+  scale_color_manual(values = c("log P95 SSC Z (-)" = "grey70", "log Mean SSC Z (-)" = "grey40")) +
   labs(
     x = NULL,
     y = "SSC Z-Score (-)"
@@ -1521,10 +1543,10 @@ ssc_overall <- plot_data |>
 ssc_overall
 
 ggsave(
-  filename = here("plots_2.0", "fig3_ssc.png"),
+  filename = here("plots_svg", "fig3_ssc.svg"),
   bg = "transparent",
   plot = ssc_overall,
-  device = "png",
+  device = svglite,
   height = 4, width = 6, units = "in"
 )
 
@@ -1557,8 +1579,8 @@ p95_line <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
   scale_shape_manual(values = shapes) +
   coord_cartesian(ylim = c(-0.4, 0.3)) +
   labs(
-    x = "Years Relative\nto Avulsion (years)",
-    y = "P95 Discharge\nlog Z-Score",
+    x = "Years Relative to Avulsion (years)",
+    y = "P95 Discharge log Z-Score",
     color = "Avulsion Type",
     fill  = "Avulsion Type",
     shape = "Avulsion Type"
@@ -1579,11 +1601,12 @@ p95_line <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
   )
 
 ggsave(
-  filename = file.path(plots_dir, "fig4_p95_line.png"),
+  filename = file.path(plots_dir, "fig4_p95_line.svg"),
   plot     = p95_line,
-  width    = 4,
-  height   = 4.5,
+  width    = 3,
+  height   = 5,
   dpi      = 300,
+  device = svglite, 
   bg       = "transparent"
 )
 
@@ -1612,8 +1635,8 @@ mean_line <- ggplot(plot_data1, aes(x = years_before, y = mean_zlog_mean_q,
   scale_shape_manual(values = shapes) +
   coord_cartesian(ylim = c(-0.4, 0.3)) +
   labs(
-    x = "Years Relative\nto Avulsion (years)",
-    y = "Mean Discharge\nlog Z-Score",
+    x = "Years Relative to Avulsion (years)",
+    y = "Mean Discharge log Z-Score",
     color = "Avulsion Type",
     fill  = "Avulsion Type",
     shape = "Avulsion Type"
@@ -1636,11 +1659,12 @@ mean_line <- ggplot(plot_data1, aes(x = years_before, y = mean_zlog_mean_q,
 mean_line
 
 ggsave(
-  filename = file.path(plots_dir, "fig4_mean_line.png"),
+  filename = file.path(plots_dir, "fig4_mean_line.svg"),
   plot     = mean_line,
-  width    = 4,
-  height   = 4.5,
+  width    = 3,
+  height   = 5,
   dpi      = 300,
+  device = svglite, 
   bg       = "transparent"
 )
 
@@ -1669,8 +1693,8 @@ flooddur_line <- ggplot(plot_data2, aes(x = years_before, y = mean_zlog_flood_du
   scale_shape_manual(values = shapes) +
   coord_cartesian(ylim = c(-0.4, 0.3)) +
   labs(
-    x = "Years Relative\nto Avulsion (years)",
-    y = "Mean Flood Duration\nlog Z-Score",
+    x = "Years Relative to Avulsion (years)",
+    y = "Mean Flood Duration log Z-Score",
     color = "Avulsion Type",
     fill  = "Avulsion Type",
     shape = "Avulsion Type"
@@ -1693,21 +1717,41 @@ flooddur_line <- ggplot(plot_data2, aes(x = years_before, y = mean_zlog_flood_du
 flooddur_line
 
 ggsave(
-  filename = file.path(plots_dir, "fig4_flooddur.png"),
+  filename = file.path(plots_dir, "fig4_flooddur.svg"),
   plot     = flooddur_line,
-  width    = 4,
-  height   = 4.5,
+  width    = 3,
+  height   = 5,
+  device = svglite, 
   dpi      = 300,
   bg       = "transparent"
 )
 
 ```
-#### Combined
+## Figure 5 
+
+## GRL Theme
 
 ```{r}
+
+grl_theme <- theme_minimal(base_size = 10) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.2, color = "grey90"),
+    axis.title.y  = element_text(face = "bold", color = "grey30", margin = margin(r = 6)),
+    axis.title.x  = element_text(face = "bold", color = "grey30", margin = margin(t = 6)),
+    axis.text     = element_text(face = "bold", color = "grey30"),
+    axis.line     = element_line(color = "grey30", linewidth = 0.8),
+    axis.ticks    = element_line(color = "grey30", linewidth = 0.8),
+    legend.position  = "none",
+    plot.background  = element_rect(fill = "transparent", colour = NA),
+    plot.margin      = margin(t = 6, r = 12, b = 6, l = 8)
+  )
+
+
 ```
 
-### Lineplot Stack
+### Avulsion Count 
 
 ```{r}
 
@@ -1765,8 +1809,13 @@ n_sites <- length(site_areas)
 
 ltype_vals <- setNames(rep("solid", length(all_levels)), all_levels)
 lsize_vals <- setNames(c(rep(0.8, n_sites), 1.6), all_levels)
-color_vals <- setNames(c("grey85", "grey45", "black", "darkred"), all_levels)
+color_vals <- setNames(c("grey85", "grey45", "black", "#c45c8a"), all_levels)
 
+```
+
+### Plotting Avulsion Count 
+
+```{r}
 # -------------------------
 # Plot
 # -------------------------
@@ -1792,25 +1841,13 @@ p_av <- ggplot(
     alpha      = 0.6
   ) +
 
-  # Mean label
-  annotate(
-    "text",
-    x        = 2020,
-    y        = mean_all + 0.3,
-    label    = paste0("Mean = ", round(mean_all, 1)),
-    hjust    = 1,
-    size     = 4,
-    fontface = "bold",
-    color    = "grey30"
-  ) +
-
   # Asterisks above significant peaks on the All Sites line
   geom_text(
     data        = poisson_results,
     aes(x = year, y = n, label = sig_label),
     inherit.aes = FALSE,
     vjust       = -0.5,
-    size        = 5,
+    size        = 10,
     fontface    = "bold",
     color       = "black"
   ) +
@@ -1827,28 +1864,26 @@ p_av <- ggplot(
 
   scale_x_continuous(
     breaks = seq(1985, 2020, by = 5),
+    limits = c(1985, 2021),
     expand = c(0, 0)
   ) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  scale_y_continuous(expand = expansion(mult = c(0.0, 0.1))) +
 
-  labs(x = "Year", y = "Number of Avulsions") +
-  theme_minimal(base_size = 12) +
+  labs(x = "Year", y = "Avulsion\nCount") +
+  theme_minimal(base_size = 16) +
   theme(
     panel.grid.major.x = element_blank(),
     panel.grid.minor   = element_blank(),
     panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.2, color = "grey90"),
-    axis.title.y  = element_text(size = 20, face = "bold", color = "grey30"),
-    axis.title.x  = element_text(size = 20, face = "bold", color = "grey30"),
-    axis.text     = element_text(size = 16, face = "bold", color = "grey30"),
+    axis.title.y  = element_text(face = "bold", color = "grey30",
+                                 margin = margin(r = 8)),   # pushes label away from edge
+    axis.title.x  = element_text(face = "bold", color = "grey30",
+                                 margin = margin(t = 4)),
+    axis.text     = element_text(face = "bold", color = "grey30"),
     axis.line     = element_line(color = "grey30", linewidth = 1.2),
     axis.ticks    = element_line(color = "grey30", linewidth = 1.2),
-    legend.position   = "bottom",
-    legend.direction  = "horizontal",
-    legend.title      = element_blank(),
-    legend.text       = element_text(size = 11, face = "bold", color = "grey30"),
-    legend.background = element_rect(fill = alpha("white", 0.7), colour = NA),
-    legend.key        = element_rect(fill = NA, colour = NA),
-    legend.spacing.x  = unit(0.3, "cm"),
+    plot.margin   = margin(t = 6, r = 10, b = 6, l = 12),
+    legend.position   = "none",
     plot.background   = element_rect(fill = "transparent", colour = NA)
   )
 
@@ -1856,90 +1891,275 @@ p_av <- ggplot(
 # Save
 # -------------------------
 ggsave(
-  filename = file.path(plots_dir, "fig_avulsion_counts_by_site.png"),
+  filename = file.path(plots_dir, "fig5_avulsion_counts_by_site.svg"),
   plot     = p_av,
-  width    = 11,
+  width    = 12,
   height   = 4.5,
   dpi      = 300,
+  device = svglite, 
   bg       = "transparent"
 )
 p_av
 ```
+
+### Superelevation Plot
+
+```{r}
+
+# Loading in Alpha Beta Values from Nature Paper
+alpha_beta <- read.csv(here("data", "nature_alpha_beta.csv")) |>
+  clean_names() |>
+  dplyr::select(avulsion_name, geomorphology, gamma, a, b, beta) |>
+  rename(site_name = avulsion_name) |>
+  mutate(site_name = str_replace_all(site_name, "_", "."))
+
+
+# Joining Nature Data Paper to Avulsion Data
+alpha_beta_av <- inner_join(join_dis, alpha_beta, by = c("site_name"))
+
+```
+
+```{r}
+
+beta_dis <- alpha_beta_av |>
+  ggplot(aes(x = zlog_mean_q, y = beta, color = av_type, fill = av_type, shape = av_type)) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.5) +
+    geom_point(size = 3, stroke = 0.1, color = "white") +
+  labs(
+    x = "Mean Discharge log Z-Score (-)",
+    y = "Beta (-)",
+    color = "Avulsion type",
+    fill  = "Avulsion type",
+    shape = "Avulsion type"
+  ) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  theme_minimal(base_size = 16) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.2, color = "grey90"),
+    axis.title.y  = element_text(face = "bold", color = "grey30"),
+    axis.title.x  = element_text(face = "bold", color = "grey30"),
+    axis.text     = element_text(face = "bold", color = "grey30"),
+    axis.line     = element_line(color = "grey30", linewidth = 1.2),
+    axis.ticks    = element_line(color = "grey30", linewidth = 1.2),
+    legend.position   = "none",
+    legend.direction  = "horizontal",
+    plot.background   = element_rect(fill = "transparent", colour = NA)
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_beta.svg"),
+  plot     = beta_dis,
+  width    = 6,
+  height   = 4.5,
+  dpi      = 300,
+  device = svglite, 
+  bg       = "transparent"
+)
+
+beta_dis
+```
+
+### Slope Advantage Plot
+
+```{r}
+
+gamma_dis <- alpha_beta_av |>
+  ggplot(aes(x = zlog_mean_q, y = gamma, color = av_type, fill = av_type, shape = av_type)) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.5) +
+  geom_point(size = 3, stroke = 0.1, color = "white") +
+  labs(
+    x = "Mean Discharge log Z-Score (-)",
+    y = "Gamma (-)",
+    color = "Avulsion type",
+    fill  = "Avulsion type",
+    shape = "Avulsion type"
+  ) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  theme_minimal(base_size = 15) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.2, color = "grey90"),
+    axis.title.y  = element_text(face = "bold", color = "grey30"),
+    axis.title.x  = element_text( face = "bold", color = "grey30"),
+    axis.text     = element_text(face = "bold", color = "grey30"),
+    axis.line     = element_line(color = "grey30", linewidth = 1.2),
+    axis.ticks    = element_line(color = "grey30", linewidth = 1.2),
+    legend.position   = "none",
+    legend.direction  = "horizontal",
+    plot.background   = element_rect(fill = "transparent", colour = NA)
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_gamma.svg"),
+  plot     = gamma_dis,
+  width    = 6,
+  height   = 4.5,
+  dpi      = 300,
+  device   = svglite, 
+  bg       = "transparent"
+)
+
+gamma_dis
+
+```
+
+```{r}
+
+library(patchwork)
+
+combined <- p_av / (beta_dis + gamma_dis)
+combined
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_combined.png"),
+  plot     = combined,
+  width    = 19,
+  height   = 10,
+  units    = "cm",
+  dpi      = 300,
+  bg       = "transparent"
+)
+```
+
 ## Supplemental Figures:
+
+### Scatter Plot of Discharge and SSC
+
+```{r}
+
+# scatter_df <- join_dis %>%
+#   inner_join(
+#     join_sed %>%
+#       select(site_name, p95_zscore_sed = p95_zscore),by = "site_name") |>
+#   filter(!is.na(p95_zscore), !is.na(p95_zscore_sed))
+# 
+# p_scatter <- ggplot(scatter_df, aes(x = p95_zscore, y = p95_zscore_sed, color = av_type)) +
+#   geom_point(
+#     size = 3,
+#     alpha = 0.7) +
+#   geom_hline(
+#     yintercept = 0,
+#     linetype = "dashed",
+#     color = "gray30",
+#     linewidth = 1.2) +
+#    geom_vline(
+#     xintercept = 0,
+#     linetype = "dashed",
+#     color = "gray30",
+#     linewidth = 1.2) +
+#   theme_minimal() +
+#   scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
+#   labs(x = "Discharge Z-Score (-)", y = "SSC Z-Score (-)") +
+#   theme(
+#     axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+#     axis.title.x = element_text(color = "grey30", size = 20, face = "bold"),
+#     
+#     axis.line.x = element_line(color = "grey30", linewidth = 1.2),
+#     axis.line.y = element_line(color = "grey30", linewidth = 1.2),
+#     
+#     axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
+#     axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
+#     
+#     axis.ticks.y = element_line(color = "grey30", size = 1.2),
+#     axis.ticks.x = element_line(color = "grey30", size = 1.2),
+#     
+#     legend.position = "none",
+#     
+#   plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
+#   )
+# p_scatter
+# 
+# ggsave(
+#   filename = here("plots_2.0", "supplemental_scatter.png"),
+#   plot = p_scatter,
+#   width = 4,
+#   height = 4,
+#   units = "in",
+#   dpi = 300
+# )
+
+```
 
 ### World Map of Discharge Z-Score
 
 ```{r}
-#Set Up Map Extent
-xmin <- -170
-xmax <- 170
-
-#Find Standard Deviation for the Dataset
-#Purpose: use for the scale to condense and make a little easier to visualize 
-std_dev_dis <- sd(join_dis$p95_zscore, na.rm = TRUE)
-
-world_map <- ne_countries(scale = "medium", returnclass = "sf") |>
-  filter(continent != "Antarctica")
-
-world_map_plot <- ggplot() +
-  geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
-  geom_point(
-    data = join_dis,
-    aes(x = site_lon, y = site_lat, color = p95_zscore),
-    size = 3,
-    alpha = 0.85,
-    shape = 16
-  ) +
-  scale_color_distiller(
-    name = "Discharge Z-Score",
-    palette = "Spectral",
-    limits = c(-0.8, 0.8),
-    oob = scales::squish
-  ) +
-  coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
-
-  theme_void(base_size = 14) +
-  theme(
-    panel.background = element_rect(fill = "white", color = NA),
-    plot.background  = element_rect(fill = "white", color = NA),
-
-    # Legend placement and sizing
-    legend.position = "top",
-    legend.justification = "center",
-    legend.box = "vertical",
-
-    # Text sizing
-    legend.title = element_text(face = "bold", size = 20),
-    legend.text  = element_text(size = 20),
-
-    # Spacing
-    legend.margin = margin(t = 12, b = 12),
-    legend.spacing.x = unit(1.5, "cm"),
-
-    # Give the plot a bit more breathing room
-    plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
-  ) +
-  guides(
-    color = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      barwidth  = unit(0.4, "npc"),   # spans most of plot width
-      barheight = unit(0.4, "cm"),
-      direction = "horizontal"
-    )
-  )
-
-world_map_plot
-
-ggsave(
-  filename = here("plots_2.0", "supplemental_dis_map.png"),
-  plot = world_map_plot,
-  width = 16,
-  height = 8,
-  units = "in",
-  dpi = 300
-)
-
+# #Set Up Map Extent
+# xmin <- -170
+# xmax <- 170
+# 
+# #Find Standard Deviation for the Dataset
+# #Purpose: use for the scale to condense and make a little easier to visualize 
+# std_dev_dis <- sd(join_dis$p95_zscore, na.rm = TRUE)
+# 
+# world_map <- ne_countries(scale = "medium", returnclass = "sf") |>
+#   filter(continent != "Antarctica")
+# 
+# world_map_plot <- ggplot() +
+#   geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
+#   geom_point(
+#     data = join_dis,
+#     aes(x = site_lon, y = site_lat, color = p95_zscore),
+#     size = 3,
+#     alpha = 0.85,
+#     shape = 16
+#   ) +
+#   scale_color_distiller(
+#     name = "Discharge Z-Score",
+#     palette = "Spectral",
+#     limits = c(-0.8, 0.8),
+#     oob = scales::squish
+#   ) +
+#   coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
+# 
+#   theme_void(base_size = 14) +
+#   theme(
+#     panel.background = element_rect(fill = "white", color = NA),
+#     plot.background  = element_rect(fill = "white", color = NA),
+# 
+#     # Legend placement and sizing
+#     legend.position = "top",
+#     legend.justification = "center",
+#     legend.box = "vertical",
+# 
+#     # Text sizing
+#     legend.title = element_text(face = "bold", size = 20),
+#     legend.text  = element_text(size = 20),
+# 
+#     # Spacing
+#     legend.margin = margin(t = 12, b = 12),
+#     legend.spacing.x = unit(1.5, "cm"),
+# 
+#     # Give the plot a bit more breathing room
+#     plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
+#   ) +
+#   guides(
+#     color = guide_colorbar(
+#       title.position = "top",
+#       title.hjust = 0.5,
+#       barwidth  = unit(0.4, "npc"),   # spans most of plot width
+#       barheight = unit(0.4, "cm"),
+#       direction = "horizontal"
+#     )
+#   )
+# 
+# world_map_plot
+# 
+# ggsave(
+#   filename = here("plots_2.0", "supplemental_dis_map.png"),
+#   plot = world_map_plot,
+#   width = 16,
+#   height = 8,
+#   units = "in",
+#   dpi = 300
+# )
+# 
 
 ```
 
@@ -1947,131 +2167,76 @@ ggsave(
 
 ```{r}
 
-#Set Map Extents
-xmin <- -170
-xmax <- 170
-
-#Find Standard Deviation for the Dataset
-#Purpose: use for the scale to condense and make a little easier to visualize 
-std_dev_sed <- sd(join_sed$p95_zscore, na.rm = TRUE)
-
-world_map <- ne_countries(
-  scale = "medium", returnclass = "sf") |>
-  filter(continent != "Antarctica")
-
-world_map_plot <- ggplot() +
-  geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
-  geom_point(
-    data = join_sed,
-    aes(x = site_lon, y = site_lat, color = p95_zscore),
-    size = 3,
-    alpha = 0.85,
-    shape = 16
-  ) +
-  scale_color_distiller(
-    name = "SSC Z-Score",
-    palette = "Spectral",
-    limits = c(-std_dev_sed, std_dev_sed),
-    oob = scales::squish
-  ) +
-  coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
-
-  theme_void(base_size = 14) +
-  theme(
-    panel.background = element_rect(fill = "white", color = NA),
-    plot.background  = element_rect(fill = "white", color = NA),
-
-    # Legend placement and sizing
-    legend.position = "top",
-    legend.justification = "center",
-    legend.box = "vertical",
-
-    # Text sizing
-    legend.title = element_text(face = "bold", size = 20),
-    legend.text  = element_text(size = 20),
-
-    # Spacing
-    legend.margin = margin(t = 12, b = 12),
-    legend.spacing.x = unit(1.5, "cm"),
-
-    # Give the plot a bit more breathing room
-    plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
-  ) +
-  guides(
-    color = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      barwidth  = unit(0.4, "npc"),   # spans most of plot width
-      barheight = unit(0.4, "cm"),
-      direction = "horizontal"
-    )
-  )
-
-world_map_plot
-
-ggsave(
-  filename = here("plots_2.0", "supplemental_ssc_map.png"),
-  plot = world_map_plot,
-  width = 16,
-  height = 8,
-  units = "in",
-  dpi = 300
-)
+# #Set Map Extents
+# xmin <- -170
+# xmax <- 170
+# 
+# #Find Standard Deviation for the Dataset
+# #Purpose: use for the scale to condense and make a little easier to visualize 
+# std_dev_sed <- sd(join_sed$p95_zscore, na.rm = TRUE)
+# 
+# world_map <- ne_countries(
+#   scale = "medium", returnclass = "sf") |>
+#   filter(continent != "Antarctica")
+# 
+# world_map_plot <- ggplot() +
+#   geom_sf(data = world_map, fill = "grey80", color = "grey80", linewidth = 0.3) +
+#   geom_point(
+#     data = join_sed,
+#     aes(x = site_lon, y = site_lat, color = p95_zscore),
+#     size = 3,
+#     alpha = 0.85,
+#     shape = 16
+#   ) +
+#   scale_color_distiller(
+#     name = "SSC Z-Score",
+#     palette = "Spectral",
+#     limits = c(-std_dev_sed, std_dev_sed),
+#     oob = scales::squish
+#   ) +
+#   coord_sf(xlim = c(xmin, xmax), ylim = c(-60, 85), expand = FALSE) +
+# 
+#   theme_void(base_size = 14) +
+#   theme(
+#     panel.background = element_rect(fill = "white", color = NA),
+#     plot.background  = element_rect(fill = "white", color = NA),
+# 
+#     # Legend placement and sizing
+#     legend.position = "top",
+#     legend.justification = "center",
+#     legend.box = "vertical",
+# 
+#     # Text sizing
+#     legend.title = element_text(face = "bold", size = 20),
+#     legend.text  = element_text(size = 20),
+# 
+#     # Spacing
+#     legend.margin = margin(t = 12, b = 12),
+#     legend.spacing.x = unit(1.5, "cm"),
+# 
+#     # Give the plot a bit more breathing room
+#     plot.margin = margin(t = 15, r = 10, b = 10, l = 10)
+#   ) +
+#   guides(
+#     color = guide_colorbar(
+#       title.position = "top",
+#       title.hjust = 0.5,
+#       barwidth  = unit(0.4, "npc"),   # spans most of plot width
+#       barheight = unit(0.4, "cm"),
+#       direction = "horizontal"
+#     )
+#   )
+# 
+# world_map_plot
+# 
+# ggsave(
+#   filename = here("plots_2.0", "supplemental_ssc_map.png"),
+#   plot = world_map_plot,
+#   width = 16,
+#   height = 8,
+#   units = "in",
+#   dpi = 300
+# )
 ```
 
-### Scatter Plot of Discharge and SSC
 
-```{r}
-
-scatter_df <- join_dis %>%
-  inner_join(
-    join_sed %>%
-      select(site_name, p95_zscore_sed = p95_zscore),by = "site_name") |>
-  filter(!is.na(p95_zscore), !is.na(p95_zscore_sed))
-
-p_scatter <- ggplot(scatter_df, aes(x = p95_zscore, y = p95_zscore_sed, color = av_type)) +
-  geom_point(
-    size = 3,
-    alpha = 0.7) +
-  geom_hline(
-    yintercept = 0,
-    linetype = "dashed",
-    color = "gray30",
-    linewidth = 1.2) +
-   geom_vline(
-    xintercept = 0,
-    linetype = "dashed",
-    color = "gray30",
-    linewidth = 1.2) +
-  theme_minimal() +
-  scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
-  labs(x = "Discharge Z-Score (-)", y = "SSC Z-Score (-)") +
-  theme(
-    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
-    axis.title.x = element_text(color = "grey30", size = 20, face = "bold"),
-    
-    axis.line.x = element_line(color = "grey30", linewidth = 1.2),
-    axis.line.y = element_line(color = "grey30", linewidth = 1.2),
-    
-    axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
-    axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
-    
-    axis.ticks.y = element_line(color = "grey30", size = 1.2),
-    axis.ticks.x = element_line(color = "grey30", size = 1.2),
-    
-    legend.position = "none",
-    
-  plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
-  )
-p_scatter
-
-ggsave(
-  filename = here("plots_2.0", "supplemental_scatter.png"),
-  plot = p_scatter,
-  width = 4,
-  height = 4,
-  units = "in",
-  dpi = 300
-)
-
-```
