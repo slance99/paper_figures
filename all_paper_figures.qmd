@@ -52,9 +52,12 @@ library(svglite)
 join_dis <- read_csv(here("data","vg_dis_z.csv")) |>
   inner_join(
     read_csv(here("data","base_sites.csv")) |>
-      select(site_name, site_lat, site_lon),   # no av_type
-    by = "site_name") |>
-  drop_na()
+      select(site_name, site_lat, site_lon),
+    by = "site_name") |> #og data missing these parts, need to join
+  mutate(
+    zlog_p95_q  = coalesce(zlog_p95_q, z_p95_q),
+    zlog_mean_q = coalesce(zlog_mean_q, z_mean_q)
+  ) #coalesce falls back to the second option if the first is not available, doing because issue with intermittent flows at 10 sites 
 
 #Sediment 
 join_sed = read_csv(here("data","vg_ssc_z.csv")) |>
@@ -192,7 +195,7 @@ world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
 colors <- c(
   "delta"             = "#0D0887FF",
-  "fan"               = "#CC4678FF",
+  "fan"               = "#9C179EFF",
   "intra-lobe"        = "#F89441FF",
   "retrogradational"  = "#F0F921FF"
 )
@@ -204,11 +207,11 @@ shapes <- c(
   "retrogradational"  = 24
 )
 
-#devtools::install_github("an-bui/calecopal")# filled shapes
-breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
-colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
-rev_colors <- rev(colors)  # Reverse the color order
-shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
+# #devtools::install_github("an-bui/calecopal")# filled shapes
+# breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
+# colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
+# rev_colors <- rev(colors)  # Reverse the color order
+# shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
 
 ```
 
@@ -535,10 +538,10 @@ p_ssc <- ggplot(site_df, aes(x = date, y = y_pred)) +
 
   # Axes (keep only scale_x_date to avoid scale replacement warnings)
   scale_x_date(
-    limits = as.Date(c("1985-01-01", "2020-12-31")),
-    breaks = seq(as.Date("1985-01-01"),
+    limits = as.Date(c("1984-01-01", "2020-12-31")),
+    breaks = seq(as.Date("1984-01-01"),
                  as.Date("2020-01-01"),
-                 by = "5 years"),
+                 by = "4 years"),
     labels = date_format("%Y"),
     expand = c(0, 0)
   ) +
@@ -612,7 +615,7 @@ av_year_updated <- read_csv(av_year_path, show_col_types = FALSE)
 compiled <- compiled %>%
   mutate(valid_time = as.POSIXct(valid_time, tz = "UTC"))
 
-xmin <- as.POSIXct("1985-01-01", tz = "UTC")
+xmin <- as.POSIXct("1984-01-01", tz = "UTC")
 xmax <- as.POSIXct("2020-12-31", tz = "UTC")
 
 # -------------------------
@@ -728,7 +731,7 @@ p_dis <- ggplot(site_df, aes(x = valid_time, y = dis24)) +
   # Date ticks + limits (add expand here; drop scale_x_continuous to avoid scale conflicts)
   scale_x_datetime(
     limits = c(xmin, xmax),
-    breaks = seq(xmin, xmax, by = "5 years"),
+    breaks = seq(xmin, xmax, by = "4 years"),
     labels = date_format("%Y"),
     expand = c(0, 0)
   ) +
@@ -957,9 +960,12 @@ p_z
 # ── COLOURS ───────────────────────────────────────────────────────────────
 colors <- plasma(4)
 av_type_colors <- setNames(colors, c("delta", "fan", "intra-lobe", "retrogradational"))
+print(av_type_colors)
 combined_colors <- c("All Sites" = "grey50", av_type_colors)
 print(names(combined_colors))
+```
 
+```{r}
 # ── T-TESTS ───────────────────────────────────────────────────────────────
 fan   <- join_dis |> filter(av_type == "fan")
 delta <- join_dis |> filter(av_type == "delta")
@@ -1609,6 +1615,7 @@ ggsave(
   device = svglite, 
   bg       = "transparent"
 )
+p95_line
 
 ```
 
@@ -1761,7 +1768,7 @@ grl_theme <- theme_minimal(base_size = 10) +
 avulsion_counts <- join_dis %>%
   filter(!is.na(avulsion_year), !is.na(site_area)) %>%
   mutate(year = as.integer(avulsion_year)) %>%
-  filter(site_area %in% c("Asia", "Tropical Island", "South America")) %>%
+  filter(site_area %in% c("Himalaya", "Pacific Islands", "South America")) %>%
   group_by(site_area, year) %>%
   summarise(n = n(), .groups = "drop")
 
@@ -1801,7 +1808,7 @@ poisson_results <- all_sites %>%
 # ---- Combine for plotting ----
 df_plot <- bind_rows(avulsion_counts, all_sites)
 
-site_areas <- c("South America", "Asia", "Tropical Island")
+site_areas <- c("South America", "Himalaya", "Pacific Islands")
 all_levels <- c(site_areas, "All Sites")
 df_plot    <- df_plot %>% mutate(site_area = factor(site_area, levels = all_levels))
 
@@ -1863,8 +1870,8 @@ p_av <- ggplot(
   ) +
 
   scale_x_continuous(
-    breaks = seq(1985, 2020, by = 5),
-    limits = c(1985, 2021),
+    breaks = seq(1984, 2020, by = 4),
+    limits = c(1983, 2021),
     expand = c(0, 0)
   ) +
   scale_y_continuous(expand = expansion(mult = c(0.0, 0.1))) +
@@ -1884,7 +1891,7 @@ p_av <- ggplot(
     axis.ticks    = element_line(color = "grey30", linewidth = 1.2),
     plot.margin   = margin(t = 6, r = 10, b = 6, l = 12),
     legend.position   = "none",
-    plot.background   = element_rect(fill = "transparent", colour = NA)
+    plot.background   = element_rect(fill = "white", colour = NA)
   )
 
 # -------------------------
@@ -1893,11 +1900,11 @@ p_av <- ggplot(
 ggsave(
   filename = file.path(plots_dir, "fig5_avulsion_counts_by_site.svg"),
   plot     = p_av,
-  width    = 12,
-  height   = 4.5,
+  width    = 9,
+  height   = 3,
   dpi      = 300,
   device = svglite, 
-  bg       = "transparent"
+  bg       = "white"
 )
 p_av
 ```
@@ -1947,17 +1954,17 @@ beta_dis <- alpha_beta_av |>
     axis.ticks    = element_line(color = "grey30", linewidth = 1.2),
     legend.position   = "none",
     legend.direction  = "horizontal",
-    plot.background   = element_rect(fill = "transparent", colour = NA)
+    plot.background   = element_rect(fill = "white", colour = NA)
   )
 
 ggsave(
   filename = file.path(plots_dir, "fig5_beta.svg"),
   plot     = beta_dis,
-  width    = 6,
-  height   = 4.5,
+  width    = 4.5,
+  height   = 3,
   dpi      = 300,
   device = svglite, 
-  bg       = "transparent"
+  bg       = "white"
 )
 
 beta_dis
@@ -1993,17 +2000,17 @@ gamma_dis <- alpha_beta_av |>
     axis.ticks    = element_line(color = "grey30", linewidth = 1.2),
     legend.position   = "none",
     legend.direction  = "horizontal",
-    plot.background   = element_rect(fill = "transparent", colour = NA)
+    plot.background   = element_rect(fill = "white", colour = NA)
   )
 
 ggsave(
   filename = file.path(plots_dir, "fig5_gamma.svg"),
   plot     = gamma_dis,
-  width    = 6,
-  height   = 4.5,
+  width    = 4.5,
+  height   = 3,
   dpi      = 300,
   device   = svglite, 
-  bg       = "transparent"
+  bg       = "white"
 )
 
 gamma_dis
