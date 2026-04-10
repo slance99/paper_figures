@@ -1,0 +1,262 @@
+﻿site_name,site_area,avulsion_start_date,date_checked,site_lat,site_lon,av_type,source,country,brooke_width_m,width_m,width_m_note
+A001,South America,1987,y,3.7427,-73.5485,fan,edmonds et al 2016,Columbia,,423,belt width of parent channel
+A002,South America,1987,y,4.0451,-73.7608,fan,edmonds et al 2016,Columbia,700,178,belt width of parent channel
+A004,South America,2002,y,3.9769,-73.3943,fan,edmonds et al 2016,Columbia,850,555,belt width of parent channel
+A005,South America,1993,y,4.563,-73.3485,fan,edmonds et al 2016,Columbia,,245,belt width of parent channel
+A006,South America,1985,y,5.1513,-72.5446,fan,edmonds et al 2016,Columbia,,505,belt width of parent channel
+A009,South America,1991,y,7.2251,-71.9329,fan,edmonds et al 2016,Venezuela,,530,belt width of parent channel
+A012,South America,2006,y,7.4123,-68.5536,fan,edmonds et al 2016,Venezuela,130,1250,belt width of parent channel
+A014,South America,2005,y,7.0341,-72.0334,fan,edmonds et al 2016,Venezuela/Colombia,,510,belt width of parent channel
+A015,South America,1998,y,7.0836,-71.9672,fan,edmonds et al 2016,Venezuela,,275,belt width of parent channel
+A016,South America,1995,y,7.0066,-71.9253,fan,edmonds et al 2016,Venezuela/Colombia,,1250,belt width of parent channel
+A017,South America,1991,y,7.0677,-71.882,fan,edmonds et al 2016,Venezuela,,300,belt width of parent channel
+A018,South America,1997,y,3.7613,-73.8341,fan,edmonds et al 2016,Columbia,300,583,belt width of parent channel
+A020,South America,1989,y,7.1738,-71.3719,fan,edmonds et al 2016,Venezuela,,630,belt width of parent channel
+A022,South America,1992,y,-15.871,-66.3614,fan,edmonds et al 2016,Bolivia,,885,belt width of parent channel
+A023,South America,1999,y,-15.7994,-66.3647,fan,edmonds et al 2016,Bolivia,,470,belt width of parent channel
+A024,South America,1998,y,-16.0667,-66.1576,fan,edmonds et al 2016,Bolivia,,640,belt width of parent channel
+A025,South America,1991,y,-15.8841,-65.8525,fan,edmonds et al 2016,Bolivia,,2500,belt width of parent channel
+A026,South America,2002,y,-17.2135,-64.8638,fan,edmonds et al 2016,Bolivia,,962,belt width of parent channel
+A027,South America,1991,y,-17.3709,-64.2165,fan,edmonds et al 2016,Bolivia,,1165,belt width of parent channel
+A028,South America,1993,y,-17.4236,-64.1347,fan,edmonds et al 2016,Bolivia,,553,belt width of parent channel
+A030,South America,2002,y,-17.3597,-64.2268,fan,edmonds et al 2016,Bolivia,,340,belt width of parent channel
+A035,South America,1994,y,-16.2747,-65.2037,fan,edmonds et al 2016,Bolivia,,1875,belt width of parent channel
+A037,South America,1990,y,-17.3139,-64.6131,fan,edmonds et al 2016,Bolivia,,235,belt width of parent channel
+A042,South America,1995,y,-16.9553,-65.3332,fan,edmonds et al 2016,Bolivia,,543,belt width of parent channel
+A044,South America,1991,y,-23.0778,-64.3191,fan,edmonds et al 2016,Bolivia,,371,belt width of parent channel
+A045,South America,1992,y,-17.0743,-62.9938,fan,edmonds et al 2016,Bolivia,,2185,belt width of parent channel
+A047,South America,2002,y,7.5564,-72.0621,fan,edmonds et al 2016,Venezuela,,106,belt width of parent channel
+A048,South America,2000,y,-16.3221,-65.8369,fan,edmonds et al 2016,Bolivia,,1702,belt width of parent channel
+A049,South America,1992,y,-16.969,-62.998,fan,edmonds et al 2016,Bolivia,,1700,belt width of parent channel
+A050,South America,1987,y,-17.3124,-64.2018,fan,edmonds et al 2016,Bolivia,,1150,belt width of parent channel
+A051,South America,1998,y,7.5577,-72.0744,fan,edmonds et al 2016,Venezuela,,315,belt width of parent channel
+AFR0211.1998,Africa,1998,y,-12.45042,13.48999,delta, brooke et al 2022,Angola,72,72,
+ANGO2.2003,Africa,2003,y,-12.88411,13.078039,delta, brooke et al 2022,Angola,395,395,
+ARG.001.2001,South America,2001,y,-27.42641,-65.11226,delta, brooke et al 2022,Argentina,250,250,
+B1,South America,1994,n,-17.0815,-62.9795,fan,valenza et al 2020,Bolivia/Argentina,400,400,average channel width at avulsion site
+B10,South America,1987,n,-16.2728,-65.2038,intra-lobe,valenza et al 2020,Bolivia/Argentina,164,164,average channel width at avulsion site
+B11,South America,2011,y,-16.0662,-66.1572,intra-lobe,valenza et al 2020,Bolivia/Argentina,,38,average channel width at avulsion site
+B12,South America,1987,n,-15.879,-65.859,intra-lobe,valenza et al 2020,Bolivia/Argentina,173,98,average channel width at avulsion site
+B13,South America,2000,y,-15.8668,-66.3614,intra-lobe,valenza et al 2020,Bolivia/Argentina,,112,average channel width at avulsion site
+B14,South America,1990, n,-14.677,-66.5308,intra-lobe,valenza et al 2020,Bolivia/Argentina,110,110,average channel width at avulsion site
+B15,South America,1991,y,-23.0769,-64.3187,fan,valenza et al 2020,Bolivia/Argentina,,355,average channel width at avulsion site
+B2,South America,2005,y,-17.4241,-64.1351,intra-lobe,valenza et al 2020,Bolivia/Argentina,60,60,average channel width at avulsion site
+B3,South America,2011,y,-17.3714,-64.2165,fan,valenza et al 2020,Bolivia/Argentina,,530,average channel width at avulsion site
+B4,South America,1994,y,-17.216,-64.855,fan,valenza et al 2020,Bolivia/Argentina,200,888,average channel width at avulsion site
+B6,South America,2007,y,-16.9729,-65.3985,fan,valenza et al 2020,Bolivia/Argentina,1400,1540,average channel width at avulsion site
+B7,South America,1994,y,-16.7048,-65.65,intra-lobe,valenza et al 2020,Bolivia/Argentina,,132,average channel width at avulsion site
+B8,South America,1998,y,-16.6125,-65.7438,intra-lobe,valenza et al 2020,Bolivia/Argentina,,113,average channel width at avulsion site
+B9,South America,2015,n,-16.3225,-65.8384,intra-lobe,valenza et al 2020,Bolivia/Argentina,159,159,average channel width at avulsion site
+BETSIBOKA.2004,Tropical Island,2004,y,-16.79922,46.93067,fan,brooke et al 2022,Madagascar,1000,1000,
+BS0115.1995,Central Asia,1995,y,39.332065,49.361848,delta,brooke et al 2022,Azerbaijan,130,130,
+CA0067.1986,Central America,1986,y,15.681704,-88.31292,delta,brooke et al 2022,Guatemala,97,97,
+CA0194.2007,Central America,2007,y,14.203061,-91.77736,delta,brooke et al 2022,Guatemala,75,75,
+CA0318.1.2002,Central America,2002,y,26.218492,-111.4146,delta,brooke et al 2022,Mexico,140,140,
+CASP1.1991,Central Asia,1991,y,37.446065,49.928818,delta,brooke et al 2022,Iran,,155,
+CON.001.2013,Africa,2013,y,1.257275,30.459619,delta,brooke et al 2022,Democratic Republic of the Congo,155,97,
+ECN0095.1999,North America,1999,y,53.761827,-60.11699,delta,brooke et al 2022,Canada,72,72,
+FIHERENANA.2001,Tropical Island,2001,y,-23.30676,43.65592,delta,brooke et al 2022,Madagascar,,,
+G1,Tropical Island,2015,y,-5.726,145.527,fan,valenza et al 2020,Papua New Guinea,500,154,average channel width at avulsion site
+G10,Tropical Island,2017,y,-3.3535,138.7594,fan,valenza et al 2020,Papua New Guinea,,59,average channel width at avulsion site
+G11,Tropical Island,2008,y,-6.5762,146.6991,fan,valenza et al 2020,Indonesia,500,219,average channel width at avulsion site
+G12,Tropical Island,2010,y,-6.6624,147.0569,fan,valenza et al 2020,Papua New Guinea,,148,average channel width at avulsion site
+G13,Tropical Island,2008,y,-6.6953,147.2111,fan,valenza et al 2020,Papua New Guinea,,231,average channel width at avulsion site
+G14,Tropical Island,2004,y,-6.6931,147.33,fan,valenza et al 2020,Papua New Guinea,,405,average channel width at avulsion site
+G15,Tropical Island,2003,y,-7.5774,147.2359,fan,valenza et al 2020,Papua New Guinea,,168,average channel width at avulsion site
+G16,Tropical Island,1994,y,-7.671,147.4265,fan,valenza et al 2020,Papua New Guinea,,182,average channel width at avulsion site
+G17,Tropical Island,2016,y,-9.079,149.0407,delta,valenza et al 2020,Papua New Guinea,,215,average channel width at avulsion site
+G18,Tropical Island,1995,y,-9.6293,149.3082,fan,valenza et al 2020,Papua New Guinea,,220,average channel width at avulsion site
+G19,Tropical Island,2015,y,-4.9712,139.9119,fan,valenza et al 2020,Indonesia,,137,average channel width at avulsion site
+G2,Tropical Island,2013,y,-5.1578,144.7887,fan,valenza et al 2020,Papua New Guinea,,37.6,average channel width at avulsion site
+G20,Tropical Island,2008,y,-5.0624,139.7273,intra-lobe,valenza et al 2020,Indonesia,,96,average channel width at avulsion site
+G21,Tropical Island,1995,y,-4.7231,139.3009,fan,valenza et al 2020,Indonesia,752,752,average channel width at avulsion site
+G22,Tropical Island,1998,y,-4.687,138.7889,intra-lobe,valenza et al 2020,Indonesia,,164,average channel width at avulsion site
+G23,Tropical Island,2005,y,-4.3663,136.8475, fan,valenza et al 2020,Indonesia,,290,average channel width at avulsion site
+G24,Tropical Island,2013,y,-4.3488,136.7978,fan,valenza et al 2020,Indonesia,,360,average channel width at avulsion site
+G25.1,Tropical Island,1999,y,-0.767259,133.62207,fan,valenza et al 2020,Indonesia,,110,average channel width at avulsion site
+G25.2,Tropical Island,2007,y,-0.8055,133.62,fan,valenza et al 2020,Indonesia,,310,average channel width at avulsion site
+G26,Tropical Island,1998,y,-3.3172,128.6831,intra-lobe,valenza et al 2020,Indonesia,,205,average channel width at avulsion site
+G3,Tropical Island,1999,y,-9.6482,148.7316,fan,valenza et al 2020,Papua New Guinea,,111,average channel width at avulsion site
+G4,Tropical Island,1998,y,-9.6206,148.65,fan,valenza et al 2020,Papua New Guinea,,24,average channel width at avulsion site
+G5,Tropical Island,1997,y,-4.1512,135.244,fan,valenza et al 2020,Indonesia,,360,average channel width at avulsion site
+G6,Tropical Island,2005,y,-3.96488,135.16649,fan,valenza et al 2020,Indonesia,550,330,average channel width at avulsion site
+G7,Tropical Island,2013,y,-4.0073,135.2514,fan,valenza et al 2020,Indonesia,,87.4,average channel width at avulsion site
+G8,Tropical Island,2017,y,-3.9686,135.0749,intra-lobe,valenza et al 2020,Indonesia,,82,average channel width at avulsion site
+G9,Tropical Island,2013,y,-3.0491,136.3711,fan,valenza et al 2020,Indonesia,95,124,average channel width at avulsion site
+H001,Asia,2008,y,26.5955,87.0109,fan,edmonds et al 2016,Nepal,,4083,belt width of parent channel
+H002,Asia,2000,y,28.0239,95.439,fan,edmonds et al 2016,India,,3228,belt width of parent channel
+H005,Asia,1998,y,28.1144,95.6672,fan,edmonds et al 2016,India,,6190,belt width of parent channel
+H006,Asia,1997,y,26.4924,96.7136,fan,edmonds et al 2016,Myanmar,,1030,belt width of parent channel
+H007,Asia,2010,y,26.8274,88.9309,fan,edmonds et al 2016,India,,512,belt width of parent channel
+H008,Asia,2006,y,26.8164,89.4164,fan,edmonds et al 2016,India,,540,belt width of parent channel
+H009,Asia,1994,y,27.4208,94.2478,fan,edmonds et al 2016,India,,1580,belt width of parent channel
+H010,Asia,2006,y,27.2954,94.0215,fan,edmonds et al 2016,India,,500,belt width of parent channel
+H011,Asia,2001,y,26.7187,89.7586,fan,edmonds et al 2016,India,,350,belt width of parent channel
+H013,Asia,1990,y,27.6664,94.8595,fan,edmonds et al 2016,India,850,1360,belt width of parent channel
+H015,Asia,1992,y,26.9136,86.0457,fan,edmonds et al 2016,Nepal,,138,belt width of parent channel
+H016,Asia,2003,y,26.9491,85.8708,fan,edmonds et al 2016,Nepal,,718,belt width of parent channel
+H017,Asia,2002,y,26.9665,85.8416,fan,edmonds et al 2016,Nepal,,158,belt width of parent channel
+H020,Asia,2011,y,27.293,84.3981,fan,edmonds et al 2016,India,,310,belt width of parent channel
+H021,Asia,2001,y,27.3059,84.4932,fan,edmonds et al 2016,India,,303,belt width of parent channel
+H022,Asia,2010,y,30.2296,77.7357,fan,edmonds et al 2016,India,,180,belt width of parent channel
+H023,Asia,2003,y,26.3585,86.5211,fan,edmonds et al 2016,India,,995,belt width of parent channel
+H024,Asia,1999,y,29.3841,78.8862,fan,edmonds et al 2016,India,,190,belt width of parent channel
+H025,Asia,2006,y,30.1847,77.809,fan,edmonds et al 2016,India,,225,belt width of parent channel
+H026,Asia,2001,y,26.8047,89.4131,fan,edmonds et al 2016,India,,540,belt width of parent channel
+H027,Asia,1992,y,26.8423,88.9466,fan,edmonds et al 2016,India,,512,belt width of parent channel
+H028,Asia,2002,y,26.751,86.1495,fan,edmonds et al 2016,Nepal,,480,belt width of parent channel
+H029,Asia,2001,y,29.2733,78.6082,fan,edmonds et al 2016,India,,390,belt width of parent channel
+H030,Asia,2001,y,27.3056,84.4389,fan,edmonds et al 2016,India,,125,belt width of parent channel
+Indus.2010,Asia,2010,y,24.7623,68.05843,delta,brooke et al 2022,India,,,
+JA.12.Eritrea,Africa,2006,y,15.714171,39.427118,delta,brooke et al 2022,Eritrea,,,
+JA.18.PNG.1994.1994,Tropical Island,1994,y,-6.69266,147.32834,fan,brooke et al 2022,India,,,
+JA.25.India.1990,Asia,1990,y,26.929021,92.422025,fan,brooke et al 2022,India,,,
+JA.25.India.1996,Asia,1996,y,26.929021,92.422025,fan,brooke et al 2022,Ethiopia,,,
+JA.26.Ethiopia.1988,Africa,1988,y,4.7164481,36.193232,fan,brooke et al 2022,Ethiopia,350,,
+JA.26.Ethiopia.1992,Africa,1992,y,4.7164481,36.193232,fan,brooke et al 2022,Ethiopia,350,,
+JA.26.Ethiopia.1998,Africa,1998,y,4.7164481,36.193232,fan,brooke et al 2022,Ethiopia,350,,
+JA.26.Ethiopia.2002,Africa,2002,y,4.7164481,36.193232,fan,brooke et al 2022,Ethiopia,350,,
+JA.26.Ethiopia.2009,Africa,2009,y,4.7164481,36.193232,fan,brooke et al 2022,Ethiopia,350,,
+JA.26.Ethiopia.2011,Africa,2011,y,4.7164481,36.193232,fan,brooke et al 2022,Ethiopia,350,,
+JA.28.Eritrea.1997.1997,Africa,1997,y,15.23647,39.686968,delta,brooke et al 2022,Eritrea,,,
+JA.30.Eritrea.2007.2007,Africa,2007,y,15.826031,39.304366,delta,brooke et al 2022,Eritrea,200,,
+JA.34.Morocco.2001.2001,Africa,2001,y,35.314136,-4.973272,delta,brooke et al 2022,Morocco,,,
+JA.35.Madagascar.2000.2000,Tropical Island,2000,y,-21.05695,43.890611,delta,brooke et al 2022,Madagascar,,,
+JA.36.Eritrea.2005.2005,Africa,2005,y,17.537548,38.797771,delta,brooke et al 2022,Eritrea,,,
+JA.37.Somalia.1989.1989,Africa,1989,y,10.589742,44.054035,delta,brooke et al 2022,Somalia,,,
+JA.38.Madagascar.1994.1994,Tropical Island,1994,y,-20.48389,44.163135,delta,brooke et al 2022,Madagascar,,,
+JA.4.Kosi.2008.2008,Asia,2008,y,26.600541,87.010028,fan,brooke et al 2022,India,,,
+JA.40.NewGuinea.Madang.1989.1989,Tropical Island,1989,y,-5.509766,145.89913,delta,brooke et al 2022,New Guinea,,,
+JA.69.PNG.2004,Tropical Island,2004,y,-5.472425,145.73921,delta,brooke et al 2022,Papua New Guinea,,,
+JA.69.PNG.2009,Tropical Island,2009,y,-5.472425,145.73921,delta,brooke et al 2022,Papua New Guinea,,,
+JA.8.India.2004.2004,Asia,2004,y,26.783104,90.956522,fan,brooke et al 2022,India,480,,
+JA.82.DeinNewGuinea.2012,Tropical Island,2012,y,-5.517249,146.07002,delta,brooke et al 2022,New Guinea,,,
+JA.91.Peru.1998,South America,1998,y,-9.270886,-78.45174,delta,brooke et al 2022,Peru,,,
+JA.95.PNG.1989.1989,Tropical Island,1989,y,-5.439398,145.73142,fan,brooke et al 2022,Papua New Guinea,,,
+JAVA12.1985,Tropical Island,1985,y,-6.920091,112.58208,delta,brooke et al 2022,Indonesia,180,,
+JAVA2.1984,Tropical Island,1984,y,-6.749281,110.58306,delta,brooke et al 2022,Indonesia,100,,
+JAVA3.1992,Tropical Island,1992,y,-6.854915,110.17566,delta,brooke et al 2022,Indonesia,,,
+JAVA5.1995,Tropical Island,1995,y,-6.754231,108.81332,delta,brooke et al 2022,Indonesia,,,
+JAVA5.1998,Tropical Island,1998,y,-6.762009,108.82315,delta,brooke et al 2022,Indonesia,,,
+JAVA5.2018,Tropical Island,2018,y,-6.751867,108.83116,delta,brooke et al 2022,Indonesia,,,
+JAVA6.2010,Tropical Island,2010,y,-6.235773,108.20044,delta,brooke et al 2022,Indonesia,,,
+JAVA7.1990,Tropical Island,1990,y,-6.205649,107.87981,delta,brooke et al 2022,Indonesia,,,
+JAVA7.2010,Tropical Island,2010,y,-6.19215,107.88984,delta,brooke et al 2022,Indonesia,,,
+JAVA8.2018,Tropical Island,2018,y,-6.049775861,106.9867289,delta,brooke et al 2022,,,,
+JAVA9.2014,Tropical Island,2014,y,-6.014357,106.63317,delta,brooke et al 2022,Indonesia,,,
+KAZ.001.1993,Central Asia,1993,y,46.467261,77.256803,delta,brooke et al 2022,Kazakhstan,,,
+KAZ.014.2011,Central Asia,2011,y,46.104023,60.864246,fan,brooke et al 2022,Kazakhstan,,,
+KEN.001.1989,Africa,1989,y,4.5685778,36.032135,delta,brooke et al 2022,Kenya,97,,
+MAHAJAMBA.2004,Tropical Island,2004,y,-16.4197,47.397163,fan,brooke et al 2022,Madagascar,500,,
+MALAWI1.2014,Africa,2014,y,-13.88624,34.576099,fan,brooke et al 2022,Malawi,100,,
+MANAMBOLO.2004,Tropical Island,2004,y,-19.1855,44.428446,delta,brooke et al 2022,Madagascar,970,,
+PI0019.1989,Tropical Island,1989,y,1.885402,98.575117,delta,brooke et al 2022,Indonesia,120,,
+PI0209.2006,Tropical Island,2006,y,-6.798919,109.05695,delta,brooke et al 2022,Indonesia,100,,
+PI0269.1.1996,Tropical Island,1996,y,-9.194668,125.52482,fan,brooke et al 2022,Timor-Leste,,,
+PI0354.2002,Tropical Island,2002,y,-3.150461,126.24082,fan,brooke et al 2022,Indonesia,,,
+PI0801.1.2007,Tropical Island,2007,y,12.744353,120.81316,delta,brooke et al 2022,Philippines,,,
+PNG.010.2011,Tropical Island,2011,y,-6.470433,146.55624,fan,brooke et al 2022,Papua New Guinea,,,
+PNG0066.1.2003,Tropical Island,2003,y,-6.693364,147.21121,fan,brooke et al 2022,Papua New Guinea,,,
+PNG0069.1991,Tropical Island,1991,y,-6.721834641,147.4431736,fan,brooke et al 2022,Papua New Guinea,,,
+R1,Tropical Island,2000,y,-10.0478,148.0854,retrogradational,edmonds et al 2022,Papua New Guinea,,50,average channel width upstream of avulsion site
+R10.1,South America,1986,y,-13.5464,-68.4792,retrogradational,edmonds et al 2022,Papua New Guinea,,26,average channel width upstream of avulsion site
+R10.2,South America,1995,y,-13.5359,-68.4707,retrogradational,edmonds et al 2022,Papua New Guinea,,26,average channel width upstream of avulsion site
+R10.3,South America,2008,y,-13.5244,-68.466,retrogradational,edmonds et al 2022,Papua New Guinea,,26,average channel width upstream of avulsion site
+R11.1,South America,1984,y,-13.8192,-67.8402,retrogradational,edmonds et al 2022,Papua New Guinea,,42,average channel width upstream of avulsion site
+R11.2,South America,1990,y,-13.779,-67.802,retrogradational,edmonds et al 2022,Papua New Guinea,,42,average channel width upstream of avulsion site
+R11.3,South America,2000,y,-13.7846,-67.8047,retrogradational,edmonds et al 2022,Papua New Guinea,,10,average channel width upstream of avulsion site
+R12,South America,1985,y,-13.989,-67.7863,retrogradational,edmonds et al 2022,Papua New Guinea,,55,average channel width upstream of avulsion site
+R14,South America,1989,y,-13.4487,-67.9909,retrogradational,edmonds et al 2022,Papua New Guinea,,31,average channel width upstream of avulsion site
+R15,South America,2005,y,-13.1683,-69.552,retrogradational,edmonds et al 2022,Bolivia,,10,average channel width upstream of avulsion site
+R16.2,South America,1992,y,-13.4642,-68.526,retrogradational,edmonds et al 2022,Bolivia,,10,average channel width upstream of avulsion site
+R16.3,South America,2011,y,-13.4776,-68.531,retrogradational,edmonds et al 2022,Bolivia,,10,average channel width upstream of avulsion site
+R17.1,South America,1984,y,-13.495,-68.5752,retrogradational,edmonds et al 2022,Bolivia,,40,average channel width upstream of avulsion site
+R17.2,South America,2006,y,-13.5048,-68.5889,retrogradational,edmonds et al 2022,Bolivia,,40,average channel width upstream of avulsion site
+R18,South America,1984,y,-14.478,-67.33,retrogradational,edmonds et al 2022,Bolivia,,40,average channel width upstream of avulsion site
+R19.2,South America,1986,y,-14.4841,-67.296,retrogradational,edmonds et al 2022,Bolivia,,14,average channel width upstream of avulsion site
+R19.3,South America,2012,y,-14.4832,-67.2948,retrogradational,edmonds et al 2022,Bolivia,,40,average channel width upstream of avulsion site
+R2.1,Tropical Island,1988,y,-9.5642,149.2851,retrogradational,edmonds et al 2022,Peru,,11,average channel width upstream of avulsion site
+R2.2,Tropical Island,2002,y,-9.5672,149.2848,retrogradational,edmonds et al 2022,Bolivia,,7,average channel width upstream of avulsion site
+R2.3,Tropical Island,2014,y,-9.5713,149.2851,retrogradational,edmonds et al 2022,Bolivia,,7,average channel width upstream of avulsion site
+R20.1,South America,1984,y,-14.5463,-67.2865,retrogradational,edmonds et al 2022,Bolivia,,23,average channel width upstream of avulsion site
+R20.2,South America,1990,y,-14.5405,-67.2794,retrogradational,edmonds et al 2022,Bolivia,,23,average channel width upstream of avulsion site
+R20.3,South America,1996,y,-14.4881,-67.2485,retrogradational,edmonds et al 2022,Bolivia,,14,average channel width upstream of avulsion site
+R20.4,South America,2015,y,-14.5248,-67.2645,retrogradational,edmonds et al 2022,Bolivia,,9,average channel width upstream of avulsion site
+R21.1,South America,1984,y,-14.5358,-67.2532,retrogradational,edmonds et al 2022,Bolivia,,9,average channel width upstream of avulsion site
+R21.2,South America,2012,y,-14.5386,-67.2033,retrogradational,edmonds et al 2022,Bolivia,,21,average channel width upstream of avulsion site
+R22.1,South America,1984,y,-14.5625,-67.1967,retrogradational,edmonds et al 2022,Bolivia,,21,average channel width upstream of avulsion site
+R22.2,South America,2004,y,-14.5792,-67.1861,retrogradational,edmonds et al 2022,Bolivia,,21,average channel width upstream of avulsion site
+R23.1,South America,1984,y,-14.641,-67.082,retrogradational,edmonds et al 2022,Bolivia,,21,average channel width upstream of avulsion site
+R23.2,South America,1984,y,-14.6737,-67.0843,retrogradational,edmonds et al 2022,Bolivia,,25,average channel width upstream of avulsion site
+R23.3,South America,2014,y,-14.6436,-67.0744,retrogradational,edmonds et al 2022,Bolivia,,25,average channel width upstream of avulsion site
+R23.4,South America,2016,y,-14.68,-67.08,retrogradational,edmonds et al 2022,Bolivia,,15,average channel width upstream of avulsion site
+R24.1,South America,1984,y,-14.7559,-67.0448,retrogradational,edmonds et al 2022,Bolivia,,15,average channel width upstream of avulsion site
+R24.2,South America,2003,y,-14.743,-67.0582,retrogradational,edmonds et al 2022,Bolivia,,16,average channel width upstream of avulsion site
+R24.3,South America,2012,y,-14.688,-66.993,retrogradational,edmonds et al 2022,Bolivia,,16,average channel width upstream of avulsion site
+R24.4,South America,2014,y,-14.727,-67.061,retrogradational,edmonds et al 2022,Bolivia,,16,average channel width upstream of avulsion site
+R25,South America,1984,y,-14.9322,-67.001,retrogradational,edmonds et al 2022,Bolivia,,16,average channel width upstream of avulsion site
+R26,South America,2009,y,-15.088,-66.7618,retrogradational,edmonds et al 2022,Bolivia,,26,average channel width upstream of avulsion site
+R27,South America,2006,y,-15.1573,-66.5493,retrogradational,edmonds et al 2022,Bolivia,,26,average channel width upstream of avulsion site
+R28.1,South America,1993,y,-15.1312,-66.3277,retrogradational,edmonds et al 2022,Bolivia,,26,average channel width upstream of avulsion site
+R28.2,South America,1993,y,-15.1312,-66.3277,retrogradational,edmonds et al 2022,Bolivia,,26,average channel width upstream of avulsion site
+R3.1,Tropical Island,1988,y,-9.4622,149.0964,retrogradational,edmonds et al 2022,Bolivia,,16,average channel width upstream of avulsion site
+R3.2,Tropical Island,2002,y,-9.432,149.0949,retrogradational,edmonds et al 2022,Bolivia,,15,average channel width upstream of avulsion site
+R30.1,South America,1984,y,-15.4287,-66.3279,retrogradational,edmonds et al 2022,Bolivia,,10,average channel width upstream of avulsion site
+R30.2,South America,2011,y,-15.4016,-66.332,retrogradational,edmonds et al 2022,Bolivia,,19,average channel width upstream of avulsion site
+R31,South America,1984,y,-15.3568,-66.2579,retrogradational,edmonds et al 2022,Bolivia,,19,average channel width upstream of avulsion site
+R32.1,South America,1984,y,-15.6519,-66.1216,retrogradational,edmonds et al 2022,Bolivia,,8,average channel width upstream of avulsion site
+R32.2,South America,2012,y,-15.6506,-66.105,retrogradational,edmonds et al 2022,Bolivia,,8,average channel width upstream of avulsion site
+R33,South America,1986,y,-15.8612,-66.0646,retrogradational,edmonds et al 2022,Bolivia,,11,average channel width upstream of avulsion site
+R34.1,South America,2002,y,-16.2666,-65.8723,retrogradational,edmonds et al 2022,Bolivia,,21,average channel width upstream of avulsion site
+R34.2,South America,2012,y,-16.2996,-65.8757,retrogradational,edmonds et al 2022,Bolivia,,21,average channel width upstream of avulsion site
+R35.2,South America,1990,y,-16.4428,-65.7126,retrogradational,edmonds et al 2022,Bolivia,,19,average channel width upstream of avulsion site
+R36,South America,1984,y,-7.5991,-75.4381,retrogradational,edmonds et al 2022,Bolivia,,36,average channel width upstream of avulsion site
+R37,South America,1984,y,-7.4998,-75.2996,retrogradational,edmonds et al 2022,Bolivia,,36,average channel width upstream of avulsion site
+R41,Tropical Island,1989,y,-4.6912,137.2953,retrogradational,edmonds et al 2022,Bolivia,,32,average channel width upstream of avulsion site
+R42,Tropical Island,2004,y,-3.884,141.9648,retrogradational,edmonds et al 2022,Peru,,29,average channel width upstream of avulsion site
+R43,Tropical Island,1992,y,-4.1237,142.2188,retrogradational,edmonds et al 2022,Peru,,22,average channel width upstream of avulsion site
+R44,Tropical Island,1989,y,-4.1232,142.3248,retrogradational,edmonds et al 2022,Papua New Guinea,,21,average channel width upstream of avulsion site
+R45,Tropical Island,1987,y,-5.5959,145.3963,retrogradational,edmonds et al 2022,Papua New Guinea,,35,average channel width upstream of avulsion site
+R46,South America,1993,y,-14.4708,-66.3524,retrogradational,edmonds et al 2022,Papua New Guinea,,39,average channel width upstream of avulsion site
+R48,South America,2002,y,-11.864,-71.385,retrogradational,edmonds et al 2022,Papua New Guinea,,28,average channel width upstream of avulsion site
+R49,South America,2000,y,-12.2393,-70.9148,retrogradational,edmonds et al 2022,Papua New Guinea,,13,average channel width upstream of avulsion site
+R5,Tropical Island,1995,y,-9.4552,149.0769,retrogradational,edmonds et al 2022,Bolivia,,85,average channel width upstream of avulsion site
+R51,South America,1993,y,-9.5171,-74.4019,retrogradational,edmonds et al 2022,Peru,,14,average channel width upstream of avulsion site
+R52.1,South America,1984,y,-14.9519,-66.9966,retrogradational,edmonds et al 2022,Peru,,15,average channel width upstream of avulsion site
+R52.2,South America,2012,y,-14.9361,-66.9754,retrogradational,edmonds et al 2022,Peru,,30,average channel width upstream of avulsion site
+R53,South America,2001,y,-3.2584,139.274,retrogradational,edmonds et al 2022,Bolivia,,13,average channel width upstream of avulsion site
+R6,Tropical Island,2006,y,-9.433,149.0289,retrogradational,edmonds et al 2022,Bolivia,,13,average channel width upstream of avulsion site
+R7,Tropical Island,2006,y,-9.4194,149.053,retrogradational,edmonds et al 2022,Bolivia,,35,average channel width upstream of avulsion site
+RUS.002.1988,Asia,1988,y,50.461424,93.107421,delta,brooke et al 2022,Russia,100,,
+RUS.002.1996,Asia,1996,y,50.481243,93.077127,delta, brooke et al 2022,Russia,50,,
+SA0210.1996,South America,1996,y,11.431154,-69.95073,delta,brooke et al 2022,Venezuela,,,
+SA0505.1999,South America,1999,y,-3.543468,-80.47866,delta,brooke et al 2022,Peru,100,,
+SAMBAO.2004,Tropical Island,2004,y,-16.59976,44.621719,delta,brooke et al 2022,Madagascar,97,,
+Sulengguole.1990,Asia,1990,y,36.8447,96.00454,delta,"Li et al., under review",China,,,
+Sulengguole.1997,Asia,1997,y,36.8447,96.00454,delta,"Li et al., under review",China,,,
+Sulengguole.2003,Asia,2003,y,36.8447,96.00454,delta,"Li et al., under review",China,,,
+Sulengguole.2008,Asia,2008,y,36.8447,96.00454,delta,"Li et al., under review",China,,,
+Sulengguole.2007,Asia,2007,y,36.8447,96.00454,delta,"Li et al., under review",China,,,
+SUMA2.2005,Tropical Island,2005,y,5.2637288,96.854628,delta,brooke et al 2022,Indonesia,50,,
+TKMN.001.2008,Central Asia,2008,y,42.070578,57.652256,fan,brooke et al 2022,Turkmenistan ,,,
+TURK.001.1993,Central Asia,1993,y,38.681588,43.640581,delta,brooke et al 2022,Turkey,,,
+TURK.002.1991,Central Asia,1991,y,40.143437,28.556474,delta,brooke et al 2022,Turkey,50,,
+UZB.001.1994,Central Asia,1994,y,39.300571,64.547069,delta,brooke et al 2022,Uzbekistan ,,,
+V1,South America,1998,y,1.1092,-76.2348,fan,valenza et al 2020,Venezuela/Colombia,,198,average channel width at avulsion site
+V10,South America,1997,y,7.0725,-72.0089,fan,valenza et al 2020,Venezuela/Colombia,,89,average channel width at avulsion site
+V11,South America,2017,y,7.1703,-71.345,intra-lobe,valenza et al 2020,Venezuela/Colombia,110,110,average channel width at avulsion site
+V12.1,South America,1997,y,7.4959,-72.035,fan,valenza et al 2020,Venezuela/Colombia,,150,average channel width at avulsion site
+V12.2,South America,2011,y,7.4959,-72.035,fan,valenza et al 2020,Venezuela/Colombia,,150,average channel width at avulsion site
+V12.3,South America,2016,y,7.4959,-72.035,fan,valenza et al 2020,Venezuela/Colombia,,150,average channel width at avulsion site
+V13,South America,2000,y,7.5596,-72.0799,fan,valenza et al 2020,Venezuela/Colombia,220,670,average channel width at avulsion site
+V14,South America,2016,y,8.4146,-69.9831,intra-lobe,valenza et al 2020,Venezuela/Colombia,,90,average channel width at avulsion site
+V4,South America,2009,y,3.504,-73.8759,fan,valenza et al 2020,Venezuela/Colombia,,432,average channel width at avulsion site
+V5.1,South America,1991,y,3.7426,-73.5485,fan,valenza et al 2020,Venezuela/Colombia,,147,average channel width at avulsion site
+V5.2,South America,1998,y,6.1934,-71.778,fan,valenza et al 2020,Venezuela/Colombia,,138,average channel width at avulsion site
+V6,South America,2012,y,6.1934,-71.778,fan,valenza et al 2020,Venezuela/Colombia,,595,average channel width at avulsion site
+V7,South America,2010,y,6.73,-71.2565,intra-lobe,valenza et al 2020,Venezuela/Colombia,57,57,average channel width at avulsion site
+V8,South America,2011,y,6.94976,-71.98327,fan,valenza et al 2020,Venezuela/Colombia,,349,average channel width at avulsion site
+V9,South America,2011,y,7.03724,-72.04633,fan,valenza et al 2020,Venezuela/Colombia,677,677,average channel width at avulsion site
+VENEZ1.1982,South America,1982,y,9.3333859,-71.75709,delta,brooke et al 2022,Venezuela/Colombia,155,,
+VENEZ2.1986,South America,1986,y,9.8023066,-71.07847,delta,brooke et al 2022,Venezuela/Colombia,,,
+VENEZ2.2009,South America,2009,y,9.8005938,-71.08504,delta,brooke et al 2022,Venezuela/Colombia,,,
