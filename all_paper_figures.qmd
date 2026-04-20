@@ -60,11 +60,21 @@ join_dis <- read_csv(here("data","vg_dis_z.csv")) |>
   ) #coalesce falls back to the second option if the first is not available, doing because issue with intermittent flows at 10 sites 
 
 #Sediment 
-join_sed = read_csv(here("data","vg_ssc_z.csv")) |>
+join_sed = read_csv(here("data","all_site_ssc_z.csv")) |>
   drop_na()
 
 ```
 
+### Count by Type
+
+```{r}
+
+count_by_type <- join_dis |>
+  group_by(av_type) |>
+  summarise(n = n()) |>
+  ungroup() 
+
+```
 ### Cleaning Discharge Data
 
 ```{r}
@@ -146,8 +156,8 @@ dis_stats <- join_dis |>
 ssc_stats <- join_sed |>
   summarise(
     n = n(),
-    mean_log_95z = mean(zlog_p95_q, na.rm = TRUE),
-    mean_log_meanz = mean(zlog_mean_q, na.rm = TRUE))
+    mean_log_95z = mean(zlog_p95_ssc, na.rm = TRUE),
+    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE))
 
 #Summarize Same Way but for Avulsion Types
 dis_stats_type <- join_dis |>
@@ -163,8 +173,8 @@ ssc_stats_type <- join_sed |>
   group_by(av_type) |>
   summarise(
     n = n(),
-    mean_log_95z = mean(zlog_p95_q, na.rm = TRUE),
-    mean_log_meanz = mean(zlog_mean_q, na.rm = TRUE))
+    mean_log_95z = mean(zlog_p95_ssc, na.rm = TRUE),
+    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE))
 ```
 
 
@@ -193,13 +203,6 @@ pre_avulsion_5 <- discharge_ts %>%
 #Loading in World Map Data
 world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
-colors <- c(
-  "delta"             = "#0D0887FF",
-  "fan"               = "#9C179EFF",
-  "intra-lobe"        = "#F89441FF",
-  "retrogradational"  = "#F0F921FF"
-)
-
 shapes <- c(
   "delta"             = 21,
   "fan"               = 22,
@@ -207,7 +210,19 @@ shapes <- c(
   "retrogradational"  = 24
 )
 
+colors <- plasma(4)
+av_type_colors <- setNames(colors, c("delta", "fan", "intra-lobe", "retrogradational"))
+print(av_type_colors)
+combined_colors <- c("All Sites" = "grey50", av_type_colors)
+print(names(combined_colors))
+
 # #devtools::install_github("an-bui/calecopal")# filled shapes
+# colors <- c(
+#   "delta"             = "#0D0887FF",
+#   "fan"               = "#9C179EFF",
+#   "intra-lobe"        = "#F89441FF",
+#   "retrogradational"  = "#F0F921FF"
+# )
 # breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
 # colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
 # rev_colors <- rev(colors)  # Reverse the color order
@@ -240,7 +255,7 @@ sf_dis <- sf_dis |>
   mutate(av_type = factor(av_type))
 
 # 3) Named color vector for av_type
-av_type_colors <- setNames(rev_colors, levels(sf_dis$av_type))
+av_type_colors <- setNames(av_type_colors, levels(sf_dis$av_type))
 
 # 4) Robinson CRS
 crs_robin <- "+proj=robin +lon_0=0 +datum=WGS84 +units=m +no_defs"
@@ -956,187 +971,18 @@ p_z
 
 ## Figure 3 - Boxplots of Discharge Z-Score
 
-### Log 95th Percentile Discharge
+### Base Plot
 
 ```{r}
-
 # ── COLOURS ───────────────────────────────────────────────────────────────
-colors <- plasma(4)
-av_type_colors <- setNames(colors, c("delta", "fan", "intra-lobe", "retrogradational"))
-print(av_type_colors)
-combined_colors <- c("All Sites" = "grey50", av_type_colors)
-print(names(combined_colors))
-```
-
-```{r}
-# ── T-TESTS ───────────────────────────────────────────────────────────────
-fan   <- join_dis |> filter(av_type == "fan")
-delta <- join_dis |> filter(av_type == "delta")
-il    <- join_dis |> filter(av_type == "intra-lobe")
-retro <- join_dis |> filter(av_type == "retrogradational")
-
-t_fan   <- t.test(fan$zlog_p95_q,      mu = 0)
-t_delta <- t.test(delta$zlog_p95_q,    mu = 0)
-t_il    <- t.test(il$zlog_p95_q,       mu = 0)
-t_retro <- t.test(retro$zlog_p95_q,    mu = 0)
-t_all   <- t.test(join_dis$zlog_p95_q, mu = 0)
-print(t_all)
-
-# ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
-pstar <- function(p) {
-  if (p < 0.001)     "***"
-  else if (p < 0.01) "**"
-  else if (p < 0.05) "*"
-  else               "ns"
-}
-
-# ── ADD "ALL SITES" AS A FACTOR LEVEL ────────────────────────────────────
-all_sites <- join_dis |>
-  mutate(av_type_plot = "All Sites")
-
-by_type <- join_dis |>
-  mutate(av_type_plot = as.character(av_type))
-
-plot_data <- bind_rows(all_sites, by_type) |>
-  mutate(av_type_plot = factor(av_type_plot,
-                                levels = c("All Sites", "delta", "fan",
-                                           "intra-lobe", "retrogradational")))
-
-# ── SIGNIFICANCE LABEL DATAFRAME ─────────────────────────────────────────
-sig_labels <- data.frame(
-  av_type_plot = factor(
-    c("All Sites", "delta", "fan", "intra-lobe", "retrogradational"),
-    levels = c("All Sites", "delta", "fan", "intra-lobe", "retrogradational")
-  ),
-  label = c(
-    pstar(t_all$p.value),
-    pstar(t_delta$p.value),
-    pstar(t_fan$p.value),
-    pstar(t_il$p.value),
-    pstar(t_retro$p.value)
-  )
-) |>
-  left_join(
-    plot_data |>
-      group_by(av_type_plot) |>
-      summarise(y_pos = max(zlog_p95_q, na.rm = TRUE) + 0.2),
-    by = "av_type_plot"
-  )
-
-# ── COLOURS INCLUDING ALL SITES ───────────────────────────────────────────
-combined_colors <- c("All Sites" = "grey70", av_type_colors)
-
-# ── SINGLE COMBINED PANEL ─────────────────────────────────────────────────
-p_combined <- plot_data |>
-  ggplot(aes(x = av_type_plot, y = zlog_p95_q, fill = av_type_plot, color = av_type_plot)) +
-
-  geom_jitter(
-    width = 0.2,
-    alpha = 0.4,
-    size  = 2
-  ) +
-
-  geom_boxplot(
-    show.legend    = FALSE,
-    alpha          = 0.4,
-    outlier.shape  = NA,
-    color          = "grey30"
-  ) +
-
-  stat_summary(
-    fun      = mean,
-    geom     = "crossbar",
-    width    = 0.5,
-    color    = scales::alpha("red", 0.50),
-    linewidth = 0.5
-  ) +
-
-  geom_hline(
-    yintercept = 0,
-    linetype   = "dashed",
-    color      = "grey30",
-    linewidth  = 1.2
-  ) +
-
-  geom_vline(
-    xintercept = 1.5,
-    linetype   = "dotted",
-    color      = "grey50",
-    linewidth  = 0.8
-  ) +
-
-  # ── SIGNIFICANCE STARS ──────────────────────────────────────────────────
-  geom_text(
-    data        = sig_labels,
-    aes(x = av_type_plot, y = y_pos, label = label),
-    inherit.aes = FALSE,
-    color       = "grey30",
-    size        = 6,
-    fontface    = "bold"
-  ) +
-
-  scale_fill_manual(values  = combined_colors) +
-  scale_color_manual(values = combined_colors) +
-
-  scale_x_discrete(labels = c(
-    "All Sites"        = "All Sites",
-    "delta"            = "Delta",
-    "fan"              = "Fan",
-    "intra-lobe"       = "Intra-lobe",
-    "retrogradational" = "Retro."
-  )) +
-
-  labs(y = "Peak Discharge Z (-)") +
-
-  theme_classic(base_size = 18) +
-  theme(
-    axis.title.y    = element_text(color = "grey30", size = 20, face = "bold"),
-    axis.title.x    = element_blank(),
-    axis.line.x     = element_line(color = "grey30", linewidth = 1.2),
-    axis.line.y     = element_line(color = "grey30", linewidth = 1.2),
-    axis.text.x     = element_text(color = "grey30", size = 16, face = "bold"),
-    axis.text.y     = element_text(color = "grey30", size = 16, face = "bold"),
-    axis.ticks.y    = element_line(color = "grey30", linewidth = 1.2),
-    axis.ticks.x    = element_line(color = "grey30", linewidth = 1.2),
-    legend.position = "none",
-    plot.background = element_rect(fill = "white", colour = NA)
-  )
-
-print(p_combined)
-
-ggsave(
-  filename = here("plots_svg", "fig3_95.svg"),
-  plot     = p_combined,
-  bg       = "white",
-  device   = svglite,
-  height   = 4, width = 6, units = "in"
-)
-
-print(levels(plot_data$av_type_plot))
-print(names(combined_colors))
-```
-### Log Mean Annual Discharge
-
-```{r}
-
-# ── COLOURS ───────────────────────────────────────────────────────────────
-colors <- plasma(4)
-av_type_colors <- setNames(colors, c("delta", "fan", "intra-lobe", "retrogradational"))
+av_type_colors = 
 combined_colors <- c("All Sites" = "grey40", av_type_colors)
-print(names(combined_colors))
 
 # ── T-TESTS ───────────────────────────────────────────────────────────────
-fan   <- join_dis |> filter(av_type == "fan")
-delta <- join_dis |> filter(av_type == "delta")
-il    <- join_dis |> filter(av_type == "intra-lobe")
-retro <- join_dis |> filter(av_type == "retrogradational")
-
-t_fan   <- t.test(fan$zlog_mean_q,      mu = 0)
-t_delta <- t.test(delta$zlog_mean_q,    mu = 0)
-t_il    <- t.test(il$zlog_mean_q,       mu = 0)
-t_retro <- t.test(retro$zlog_mean_q,    mu = 0)
-t_all   <- t.test(join_dis$zlog_mean_q, mu = 0)
-print(t_all)
+fan   <- join_sed |> filter(av_type == "fan")
+delta <- join_sed |> filter(av_type == "delta")
+il    <- join_sed |> filter(av_type == "intra-lobe")
+retro <- join_sed |> filter(av_type == "retrogradational")
 
 # ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
 pstar <- function(p) {
@@ -1146,309 +992,132 @@ pstar <- function(p) {
   else               "ns"
 }
 
-# ── SIGNIFICANCE LABEL DATAFRAME ─────────────────────────────────────────
-# y position is set just above the max value for each group
-sig_labels <- data.frame(
-  av_type_plot = factor(
-    c("All Sites", "delta", "fan", "intra-lobe", "retrogradational"),
-    levels = c("All Sites", "delta", "fan", "intra-lobe", "retrogradational")
-  ),
-  label = c(
-    pstar(t_all$p.value),
-    pstar(t_delta$p.value),
-    pstar(t_fan$p.value),
-    pstar(t_il$p.value),
-    pstar(t_retro$p.value)
-  )
-)
+# ── HELPER: BUILD PLOT DATA + SIG LABELS FOR ONE METRIC ──────────────────
+make_panel <- function(data, metric_col, y_label, exclude_types = NULL) {
 
-# calculate y position for each label (just above the max of each group)
-y_positions <- plot_data |>
-  group_by(av_type_plot) |>
-  summarise(y_pos = max(zlog_mean_q, na.rm = TRUE) + 0.2)  # +0.2 padding above max
+  # Optionally filter out avulsion types
+  if (!is.null(exclude_types)) {
+    data <- data |> filter(!av_type %in% exclude_types)
+  }
 
-sig_labels <- sig_labels |>
-  left_join(y_positions, by = "av_type_plot")
+  all_sites <- data |> mutate(av_type_plot = "All Sites")
+  by_type   <- data |> mutate(av_type_plot = as.character(av_type))
 
-# ── ADD "ALL SITES" AS A FACTOR LEVEL ────────────────────────────────────
-all_sites <- join_dis |>
-  mutate(av_type_plot = "All Sites")
+  # Build factor levels dynamically based on remaining av_types
+  remaining_types <- unique(as.character(data$av_type))
+  all_levels <- c("All Sites", intersect(c("delta", "fan", "intra-lobe", "retrogradational"), remaining_types))
 
-by_type <- join_dis |>
-  mutate(av_type_plot = as.character(av_type))
+  plot_data <- bind_rows(all_sites, by_type) |>
+    mutate(av_type_plot = factor(av_type_plot, levels = all_levels))
 
-plot_data <- bind_rows(all_sites, by_type) |>
-  mutate(av_type_plot = factor(av_type_plot,
-                                levels = c("All Sites", "delta", "fan",
-                                           "intra-lobe", "retrogradational")))
+  # T-tests — only for types present in data
+  t_all    <- t.test(data[[metric_col]], mu = 0)
+  t_by_type <- lapply(remaining_types, function(typ) {
+    t.test(data |> filter(av_type == typ) |> pull(metric_col), mu = 0)
+  })
+  names(t_by_type) <- remaining_types
 
-# recalculate y positions now plot_data is defined
-y_positions <- plot_data |>
-  group_by(av_type_plot) |>
-  summarise(y_pos = max(zlog_mean_q, na.rm = TRUE) + 0.2)
-
-sig_labels <- sig_labels |>
-  select(-y_pos) |>
-  left_join(y_positions, by = "av_type_plot")
-
-# ── SINGLE COMBINED PANEL ─────────────────────────────────────────────────
-p_combined <- plot_data |>
-  ggplot(aes(x = av_type_plot, y = zlog_mean_q, fill = av_type_plot, color = av_type_plot)) +
-
-  geom_jitter(
-    width = 0.2,
-    alpha = 0.4,
-    size  = 2
-  ) +
-
-  geom_boxplot(
-    show.legend    = FALSE,
-    alpha          = 0.4,
-    outlier.shape  = NA,
-    color          = "grey30"
-  ) +
-
-  stat_summary(
-    fun      = mean,
-    geom     = "crossbar",
-    width    = 0.5,
-    color    = scales::alpha("red", 0.50),
-    linewidth = 0.5
-  ) +
-
-  geom_hline(
-    yintercept = 0,
-    linetype   = "dashed",
-    color      = "grey30",
-    linewidth  = 1.2
-  ) +
-
-  geom_vline(
-    xintercept = 1.5,
-    linetype   = "dotted",
-    color      = "grey50",
-    linewidth  = 0.8
-  ) +
-
-  # ── SIGNIFICANCE STARS ──────────────────────────────────────────────────
-  geom_text(
-    data    = sig_labels,
-    aes(x = av_type_plot, y = y_pos, label = label),
-    inherit.aes = FALSE,      # don't inherit fill/color from main aes
-    color   = "grey30",
-    size    = 6,
-    fontface = "bold"
-  ) +
-
-  scale_fill_manual(values  = combined_colors) +
-  scale_color_manual(values = combined_colors) +
-
-  scale_x_discrete(labels = c(
-    "All Sites"        = "All Sites",
-    "delta"            = "Delta",
-    "fan"              = "Fan",
-    "intra-lobe"       = "Intra-lobe",
-    "retrogradational" = "Retro."
-  )) +
-
-  labs(y = "Mean Discharge Z (-)") +
-
-  theme_classic(base_size = 18) +
-  theme(
-    axis.title.y    = element_text(color = "grey30", size = 20, face = "bold"),
-    axis.title.x    = element_blank(),
-    axis.line.x     = element_line(color = "grey30", linewidth = 1.2),
-    axis.line.y     = element_line(color = "grey30", linewidth = 1.2),
-    axis.text.x     = element_text(color = "grey30", size = 16, face = "bold"),
-    axis.text.y     = element_text(color = "grey30", size = 16, face = "bold"),
-    axis.ticks.y    = element_line(color = "grey30", linewidth = 1.2),
-    axis.ticks.x    = element_line(color = "grey30", linewidth = 1.2),
-    legend.position = "none",
-    plot.background = element_rect(fill = "white", colour = NA)
+  # Significance labels
+  sig_labels <- data.frame(
+    av_type_plot = factor(all_levels, levels = all_levels),
+    label = c(
+      pstar(t_all$p.value),
+      sapply(remaining_types, function(typ) pstar(t_by_type[[typ]]$p.value))
+    )
   )
 
-print(p_combined)
+  y_positions <- plot_data |>
+    group_by(av_type_plot) |>
+    summarise(y_pos = max(.data[[metric_col]], na.rm = TRUE) + 0.2)
 
-ggsave(
-  filename = here("plots_svg", "fig3_mean.svg"),
-  plot     = p_combined,
-  bg       = "white",
-  device   = svglite,
-  height   = 4, width = 6, units = "in"
-)
+  sig_labels <- sig_labels |> left_join(y_positions, by = "av_type_plot")
+
+  # Colors — built dynamically
+  base_colors <- c("delta" = plasma(4)[1], "fan" = plasma(4)[2],
+                   "intra-lobe" = plasma(4)[3], "retrogradational" = plasma(4)[4])
+  combined_colors <- c("All Sites" = "grey40", base_colors[remaining_types])
+
+  ggplot(plot_data, aes(x = av_type_plot, y = .data[[metric_col]],
+                         fill = av_type_plot, color = av_type_plot)) +
+
+    geom_jitter(width = 0.2, alpha = 0.4, size = 2) +
+    geom_boxplot(show.legend = FALSE, alpha = 0.4,
+                 outlier.shape = NA, color = "grey30") +
+    stat_summary(fun = mean, geom = "crossbar", width = 0.5,
+                 color = scales::alpha("red", 0.50), linewidth = 0.5) +
+    geom_hline(yintercept = 0, linetype = "dashed",
+               color = "grey30", linewidth = 1.2) +
+    geom_vline(xintercept = 1.5, linetype = "dotted",
+               color = "grey50", linewidth = 0.8) +
+    geom_text(data = sig_labels,
+              aes(x = av_type_plot, y = y_pos, label = label),
+              inherit.aes = FALSE, color = "grey30", size = 6, fontface = "bold") +
+    scale_fill_manual(values = combined_colors) +
+    scale_color_manual(values = combined_colors) +
+    scale_x_discrete(labels = c(
+      "All Sites"        = "All Sites",
+      "delta"            = "Delta",
+      "fan"              = "Fan",
+      "intra-lobe"       = "Intra-lobe",
+      "retrogradational" = "Retro."
+    )) +
+    labs(y = y_label) +
+    theme_classic(base_size = 18) +
+    theme(
+      axis.title.y    = element_text(color = "grey30", size = 20, face = "bold"),
+      axis.title.x    = element_blank(),
+      axis.line.x     = element_line(color = "grey30", linewidth = 1.2),
+      axis.line.y     = element_line(color = "grey30", linewidth = 1.2),
+      axis.text.x     = element_text(color = "grey30", size = 16, face = "bold"),
+      axis.text.y     = element_text(color = "grey30", size = 16, face = "bold"),
+      axis.ticks.y    = element_line(color = "grey30", linewidth = 1.2),
+      axis.ticks.x    = element_line(color = "grey30", linewidth = 1.2),
+      legend.position = "none",
+      plot.background = element_rect(fill = "white", colour = NA)
+    )
+}
+
 ```
 
-### Log Flood Duration
+### Call Panels
 
 ```{r}
 
-# ── COLOURS ───────────────────────────────────────────────────────────────
-colors <- plasma(4)
-av_type_colors <- setNames(colors, c("delta", "fan", "intra-lobe", "retrogradational"))
-combined_colors <- c("All Sites" = "grey20", av_type_colors)
-print(names(combined_colors))
+# ── BUILD ALL PANELS ──────────────────────────────────────────────────────
+p_p95_ssc   <- make_panel(join_sed, "zlog_p95_ssc",   "P95 SSC Z (-)",        exclude_types = "retrogradational")
+p_mean_ssc  <- make_panel(join_sed, "zlog_mean_ssc",  "Mean SSC Z (-)",       exclude_types = "retrogradational")
+p_p95_q     <- make_panel(join_dis, "zlog_p95_q",     "P95 Discharge Z (-)")
+p_mean_q    <- make_panel(join_dis, "zlog_mean_q",    "Mean Discharge Z (-)")
+p_flood_dur <- make_panel(join_dis, "zlog_flood_dur", "Flood Duration Z (-)")
 
-# ── T-TESTS ───────────────────────────────────────────────────────────────
-fan   <- join_dis |> filter(av_type == "fan")
-delta <- join_dis |> filter(av_type == "delta")
-il    <- join_dis |> filter(av_type == "intra-lobe")
-retro <- join_dis |> filter(av_type == "retrogradational")
+# ── SAVE SEPARATELY ───────────────────────────────────────────────────────
+plots <- list(
+  "fig_p95_ssc"   = p_p95_ssc,
+  "fig_mean_ssc"  = p_mean_ssc,
+  "fig_p95_q"     = p_p95_q,
+  "fig_mean_q"    = p_mean_q,
+  "fig_flood_dur" = p_flood_dur
+)
 
-t_fan   <- t.test(fan$zlog_flood_dur,      mu = 0)
-t_delta <- t.test(delta$zlog_flood_dur,    mu = 0)
-t_il    <- t.test(il$zlog_flood_dur,       mu = 0)
-t_retro <- t.test(retro$zlog_flood_dur,    mu = 0)
-t_all   <- t.test(join_dis$zlog_flood_dur, mu = 0)
-print(t_all)
-
-# ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
-pstar <- function(p) {
-  if (p < 0.001)     "***"
-  else if (p < 0.01) "**"
-  else if (p < 0.05) "*"
-  else               "ns"
+#Save Panels
+for (name in names(plots)) {
+  ggsave(
+    filename = here("plots_svg", paste0(name, ".svg")),
+    plot     = plots[[name]],
+    bg       = "white",
+    device   = svglite,
+    height   = 4, width = 6, units = "in"
+  )
 }
 
-# ── SIGNIFICANCE LABEL DATAFRAME ─────────────────────────────────────────
-# y position is set just above the max value for each group
-sig_labels <- data.frame(
-  av_type_plot = factor(
-    c("All Sites", "delta", "fan", "intra-lobe", "retrogradational"),
-    levels = c("All Sites", "delta", "fan", "intra-lobe", "retrogradational")
-  ),
-  label = c(
-    pstar(t_all$p.value),
-    pstar(t_delta$p.value),
-    pstar(t_fan$p.value),
-    pstar(t_il$p.value),
-    pstar(t_retro$p.value)
-  )
-)
-
-# calculate y position for each label (just above the max of each group)
-y_positions <- plot_data |>
-  group_by(av_type_plot) |>
-  summarise(y_pos = max(zlog_flood_dur, na.rm = TRUE) + 0.2)  # +0.2 padding above max
-
-sig_labels <- sig_labels |>
-  left_join(y_positions, by = "av_type_plot")
-
-# ── ADD "ALL SITES" AS A FACTOR LEVEL ────────────────────────────────────
-all_sites <- join_dis |>
-  mutate(av_type_plot = "All Sites")
-
-by_type <- join_dis |>
-  mutate(av_type_plot = as.character(av_type))
-
-plot_data <- bind_rows(all_sites, by_type) |>
-  mutate(av_type_plot = factor(av_type_plot,
-                                levels = c("All Sites", "delta", "fan",
-                                           "intra-lobe", "retrogradational")))
-
-# recalculate y positions now plot_data is defined
-y_positions <- plot_data |>
-  group_by(av_type_plot) |>
-  summarise(y_pos = max(zlog_flood_dur, na.rm = TRUE) + 0.2)
-
-sig_labels <- sig_labels |>
-  select(-y_pos) |>
-  left_join(y_positions, by = "av_type_plot")
-
-combined_colors <- c("All Sites" = "grey30", av_type_colors)
-
-# ── SINGLE COMBINED PANEL ─────────────────────────────────────────────────
-p_combined <- plot_data |>
-  ggplot(aes(x = av_type_plot, y = zlog_flood_dur, fill = av_type_plot, color = av_type_plot)) +
-
-  geom_jitter(
-    width = 0.2,
-    alpha = 0.4,
-    size  = 2
-  ) +
-
-  geom_boxplot(
-    show.legend    = FALSE,
-    alpha          = 0.4,
-    outlier.shape  = NA,
-    color          = "grey30"
-  ) +
-
-  stat_summary(
-    fun      = mean,
-    geom     = "crossbar",
-    width    = 0.5,
-    color    = scales::alpha("red", 0.50),
-    linewidth = 0.5
-  ) +
-
-  geom_hline(
-    yintercept = 0,
-    linetype   = "dashed",
-    color      = "grey30",
-    linewidth  = 1.2
-  ) +
-
-  geom_vline(
-    xintercept = 1.5,
-    linetype   = "dotted",
-    color      = "grey50",
-    linewidth  = 0.8
-  ) +
-
-  # ── SIGNIFICANCE STARS ──────────────────────────────────────────────────
-  geom_text(
-    data    = sig_labels,
-    aes(x = av_type_plot, y = y_pos, label = label),
-    inherit.aes = FALSE,      # don't inherit fill/color from main aes
-    color   = "grey30",
-    size    = 6,
-    fontface = "bold"
-  ) +
-
-  scale_fill_manual(values  = combined_colors) +
-  scale_color_manual(values = combined_colors) +
-
-  scale_x_discrete(labels = c(
-    "All Sites"        = "All Sites",
-    "delta"            = "Delta",
-    "fan"              = "Fan",
-    "intra-lobe"       = "Intra-lobe",
-    "retrogradational" = "Retro."
-  )) +
-
-  labs(y = "Flood Duration Z (-)") +
-
-  theme_classic(base_size = 18) +
-  theme(
-    axis.title.y    = element_text(color = "grey30", size = 20, face = "bold"),
-    axis.title.x    = element_blank(),
-    axis.line.x     = element_line(color = "grey30", linewidth = 1.2),
-    axis.line.y     = element_line(color = "grey30", linewidth = 1.2),
-    axis.text.x     = element_text(color = "grey30", size = 16, face = "bold"),
-    axis.text.y     = element_text(color = "grey30", size = 16, face = "bold"),
-    axis.ticks.y    = element_line(color = "grey30", linewidth = 1.2),
-    axis.ticks.x    = element_line(color = "grey30", linewidth = 1.2),
-    legend.position = "none",
-    plot.background = element_rect(fill = "white", colour = NA)
-  )
-
-print(p_combined)
-
-ggsave(
-  filename = here("plots_svg", "fig3_dur.svg"),
-  plot     = p_combined,
-  bg       = "white",
-  device   = svglite,
-  height   = 4, width = 6, units = "in"
-)
-
 ```
+
 ### Log SSC Data
 ```{r}
 
 # ── RESHAPE DATA ──────────────────────────────────────────────────────────
 plot_data <- join_sed |>
-  select(zlog_p95_q, zlog_mean_q) |>
+  select(zlog_p95_ssc, zlog_mean_ssc) |>
   pivot_longer(
     cols = everything(),
     names_to = "variable",
@@ -1456,15 +1125,15 @@ plot_data <- join_sed |>
   ) |>
   mutate(
     variable = case_when(
-      variable == "zlog_p95_q"  ~ "Peak Discharge Z (-)",
-      variable == "zlog_mean_q" ~ "Mean Discharge Z (-)"
+      variable == "zlog_p95_ssc"  ~ "Peak",
+      variable == "zlog_mean_ssc" ~ "Mean"
     ),
-    variable = factor(variable, levels = c("Peak Discharge Z (-)", "Mean Discharge Z (-)"))
+    variable = factor(variable, levels = c("Peak", "Mean"))
   )
 
 # ── T-TESTS ───────────────────────────────────────────────────────────────
-t_p95  <- t.test(join_sed$zlog_p95_q,  mu = 0)
-t_mean <- t.test(join_sed$zlog_mean_q, mu = 0)
+t_p95  <- t.test(join_sed$zlog_p95_ssc,  mu = 0)
+t_mean <- t.test(join_sed$zlog_mean_ssc, mu = 0)
 
 # ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
 pstar <- function(p) {
@@ -1481,8 +1150,8 @@ y_positions <- plot_data |>
 
 sig_labels <- data.frame(
   variable = factor(
-    c("Peak Discharge Z (-)", "Mean Discharge Z (-)"),
-    levels = c("Peak Discharge Z (-)", "Mean Discharge Z (-)")
+    c("Peak", "Mean"),
+    levels = c("Peak", "Mean")
   ),
   label = c(
     pstar(t_p95$p.value),
@@ -1531,8 +1200,8 @@ ssc_overall <- plot_data |>
     size = 6,
     fontface = "bold"
   ) +
-  scale_fill_manual(values  = c("Peak Discharge Z (-)" = "grey70", "Mean Discharge Z (-)" = "grey40")) +
-  scale_color_manual(values = c("Peak Discharge Z (-)" = "grey70", "Mean Discharge Z (-)" = "grey40")) +
+  scale_fill_manual(values  = c("Peak" = "grey70", "Mean" = "grey40")) +
+  scale_color_manual(values = c("Peak" = "grey70", "Mean" = "grey40")) +
   labs(
     x = NULL,
     y = "SSC Z-Score (-)"
@@ -1563,9 +1232,8 @@ ggsave(
 
 ```
 
-## Figure 4
+## Figure 4 - Leadup to Avulsoins
 
-### Leadup to Avulsions
 
 #### Log P95 Annual Discharge
 
@@ -1808,7 +1476,7 @@ grid.arrange(
 
 ```
 
-## Figure 5 
+## Figure 5 - Avulsion Count 
 
 ## GRL Theme
 
@@ -2138,56 +1806,96 @@ ggsave(
 
 ```{r}
 
-# scatter_df <- join_dis %>%
-#   inner_join(
-#     join_sed %>%
-#       select(site_name, p95_zscore_sed = p95_zscore),by = "site_name") |>
-#   filter(!is.na(p95_zscore), !is.na(p95_zscore_sed))
-# 
-# p_scatter <- ggplot(scatter_df, aes(x = p95_zscore, y = p95_zscore_sed, color = av_type)) +
-#   geom_point(
-#     size = 3,
-#     alpha = 0.7) +
-#   geom_hline(
-#     yintercept = 0,
-#     linetype = "dashed",
-#     color = "gray30",
-#     linewidth = 1.2) +
-#    geom_vline(
-#     xintercept = 0,
-#     linetype = "dashed",
-#     color = "gray30",
-#     linewidth = 1.2) +
-#   theme_minimal() +
-#   scale_color_manual(name = "Avulsion Type", values = av_type_colors) +
-#   labs(x = "Discharge Z-Score (-)", y = "SSC Z-Score (-)") +
-#   theme(
-#     axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
-#     axis.title.x = element_text(color = "grey30", size = 20, face = "bold"),
-#     
-#     axis.line.x = element_line(color = "grey30", linewidth = 1.2),
-#     axis.line.y = element_line(color = "grey30", linewidth = 1.2),
-#     
-#     axis.text.x  = element_text(color = "grey30", size = 16, face = "bold"),
-#     axis.text.y = element_text(color = "grey30", size = 16, face = "bold"),
-#     
-#     axis.ticks.y = element_line(color = "grey30", size = 1.2),
-#     axis.ticks.x = element_line(color = "grey30", size = 1.2),
-#     
-#     legend.position = "none",
-#     
-#   plot.background = element_rect(fill = "transparent", colour = NA) # Transparent plot bg
-#   )
-# p_scatter
-# 
-# ggsave(
-#   filename = here("plots_2.0", "supplemental_scatter.png"),
-#   plot = p_scatter,
-#   width = 4,
-#   height = 4,
-#   units = "in",
-#   dpi = 300
-# )
+make_scatter <- function(data, x_col, y_col, x_label, y_label, exclude_types = NULL) {
+
+  if (!is.null(exclude_types)) {
+    data <- data |> filter(!av_type %in% exclude_types)
+  }
+
+  remaining_types <- intersect(c("delta", "fan", "intra-lobe", "retrogradational"),
+                                unique(as.character(data$av_type)))
+  base_colors <- c("delta"            = plasma(4)[1],
+                   "fan"              = plasma(4)[2],
+                   "intra-lobe"       = plasma(4)[3],
+                   "retrogradational" = plasma(4)[4])
+  type_colors <- base_colors[remaining_types]
+
+  data <- data |> mutate(av_type = factor(av_type, levels = remaining_types))
+
+  # ── LINEAR FIT STATS ──────────────────────────────────────────────────
+  fit <- lm(data[[y_col]] ~ data[[x_col]], data = data)
+  r2  <- summary(fit)$r.squared
+  pval <- summary(fit)$coefficients[2, 4]
+
+  # Format p-value
+  p_label <- if (pval < 0.001) "p < 0.001" else paste0("p = ", round(pval, 3))
+  fit_label <- paste0("R² = ", round(r2, 2), "\n", p_label)
+
+  # Label position — top left of plot
+  x_pos <- min(data[[x_col]], na.rm = TRUE)
+  y_pos <- max(data[[y_col]], na.rm = TRUE)
+
+  ggplot(data, aes(x = .data[[x_col]], y = .data[[y_col]],
+                   color = av_type, fill = av_type)) +
+
+    geom_point(alpha = 0.6, size = 2.5) +
+
+    # Linear fit line with confidence interval
+    geom_smooth(method = "lm", se = TRUE, inherit.aes = FALSE,
+                aes(x = .data[[x_col]], y = .data[[y_col]]),
+                color = "grey30", fill = "grey70",
+                linewidth = 0.8, alpha = 0.2) +
+
+    # R² and p-value annotation
+    annotate("text", x = x_pos, y = y_pos,
+             label = fit_label,
+             hjust = 0, vjust = 1,
+             color = "grey30", size = 5, fontface = "bold") +
+
+    scale_color_manual(values = type_colors,
+                       labels = c("delta"            = "Delta",
+                                  "fan"              = "Fan",
+                                  "intra-lobe"       = "Intra-lobe",
+                                  "retrogradational" = "Retro.")) +
+    scale_fill_manual(values = type_colors,
+                      labels = c("delta"            = "Delta",
+                                 "fan"              = "Fan",
+                                 "intra-lobe"       = "Intra-lobe",
+                                 "retrogradational" = "Retro.")) +
+
+    labs(x = x_label, y = y_label, color = "Avulsion Type", fill = "Avulsion Type") +
+
+    theme_classic(base_size = 18) +
+    theme(
+      axis.title.x    = element_text(color = "grey30", size = 20, face = "bold"),
+      axis.title.y    = element_text(color = "grey30", size = 20, face = "bold"),
+      axis.line.x     = element_line(color = "grey30", linewidth = 1.2),
+      axis.line.y     = element_line(color = "grey30", linewidth = 1.2),
+      axis.text.x     = element_text(color = "grey30", size = 16, face = "bold"),
+      axis.text.y     = element_text(color = "grey30", size = 16, face = "bold"),
+      axis.ticks.y    = element_line(color = "grey30", linewidth = 1.2),
+      axis.ticks.x    = element_line(color = "grey30", linewidth = 1.2),
+      legend.position = "none",
+      legend.title    = element_text(color = "grey30", size = 14, face = "bold"),
+      legend.text     = element_text(color = "grey30", size = 12),
+      plot.background = element_rect(fill = "white", colour = NA)
+    )
+}
+
+
+join_all <- join_dis |> 
+  inner_join(join_sed, by = c("site_name", "av_type", "site_area", "avulsion_year"))
+
+p_scatter_p95  <- make_scatter(join_all, "zlog_p95_q",  "zlog_p95_ssc",
+                                "P95 Discharge Z (-)", "P95 SSC Z (-)")
+
+p_scatter_mean <- make_scatter(join_all, "zlog_mean_q", "zlog_mean_ssc",
+                                "Mean Discharge Z (-)", "Mean SSC Z (-)")
+
+ggsave(here("plots_svg", "scatter_p95.svg"),  p_scatter_p95,
+       bg = "white", device = svglite, height = 4, width = 6, units = "in")
+ggsave(here("plots_svg", "scatter_mean.svg"), p_scatter_mean,
+       bg = "white", device = svglite, height = 4, width = 6, units = "in")
 
 ```
 
