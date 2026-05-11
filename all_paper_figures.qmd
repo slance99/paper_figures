@@ -75,6 +75,7 @@ count_by_type <- join_dis |>
   ungroup() 
 
 ```
+
 ### Cleaning Discharge Data
 
 ```{r}
@@ -177,7 +178,6 @@ ssc_stats_type <- join_sed |>
     mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE))
 ```
 
-
 ### Reading in Full Time Series Data
 
 ```{r}
@@ -187,7 +187,7 @@ discharge_ts <- read_csv(here("data", "vg_dis_z_all_years.csv"))
 
 ```
 
-###  Pulling out 5 Years Prior to Avulsion
+### Pulling out 5 Years Prior to Avulsion
 
 ```{r}
 pre_avulsion_5 <- discharge_ts %>%
@@ -1113,6 +1113,7 @@ for (name in names(plots)) {
 ```
 
 ### Log SSC Data
+
 ```{r}
 
 # ── RESHAPE DATA ──────────────────────────────────────────────────────────
@@ -1234,7 +1235,6 @@ ggsave(
 
 ## Figure 4 - Leadup to Avulsoins
 
-
 #### Log P95 Annual Discharge
 
 ```{r}
@@ -1299,7 +1299,7 @@ p95_line
 
 ```
 
-#### Log Mean Annual Discharge 
+#### Log Mean Annual Discharge
 
 ```{r}
 
@@ -1364,7 +1364,7 @@ ggsave(
 
 ```
 
-#### Log Mean Annual Discharge 
+#### Log Mean Annual Discharge
 
 ```{r}
 
@@ -1427,6 +1427,7 @@ ggsave(
   bg       = "transparent"
 )
 ```
+
 ### Combined Leadup
 
 ```{r}
@@ -1476,7 +1477,7 @@ grid.arrange(
 
 ```
 
-## Figure 5 - Avulsion Count 
+## Figure 5 - Avulsion Count
 
 ## GRL Theme
 
@@ -1500,7 +1501,7 @@ grl_theme <- theme_minimal(base_size = 10) +
 
 ```
 
-### Avulsion Count 
+### Avulsion Count
 
 ```{r}
 
@@ -1562,7 +1563,7 @@ color_vals <- setNames(c("#5ec962", "#21918c", "#3b528b", "black"), all_levels)
 
 ```
 
-### Plotting Avulsion Count 
+### Plotting Avulsion Count
 
 ```{r}
 # -------------------------
@@ -1655,6 +1656,7 @@ ggsave(
 )
 p_av
 ```
+
 ```{r}
 
 # Check what's actually in df_plot
@@ -1674,6 +1676,7 @@ ltype_vals
 join_dis %>% 
   distinct(site_area)
 ```
+
 ### Superelevation Plot
 
 ```{r}
@@ -2050,5 +2053,3 @@ ggsave(here("plots_svg", "scatter_mean.svg"), p_scatter_mean,
 #   dpi = 300
 # )
 ```
-
-
