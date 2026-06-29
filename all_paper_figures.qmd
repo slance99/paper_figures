@@ -63,6 +63,8 @@ join_dis <- read_csv(here("data","vg_dis_z.csv")) |>
 join_sed = read_csv(here("data","all_site_ssc_z.csv")) |>
   drop_na()
 
+
+
 ```
 
 ### Count by Type
@@ -73,6 +75,11 @@ count_by_type <- join_dis |>
   group_by(av_type) |>
   summarise(n = n()) |>
   ungroup() 
+
+count_by_type_ssc <- join_sed |>
+  group_by(av_type) |>
+  summarise(n = n()) |>
+  ungroup()
 
 ```
 
@@ -105,6 +112,9 @@ if (length(miss_idx) > 0) {
 sf_dis <- continent_joined %>%
   st_drop_geometry() %>%
   rename(country = name)
+
+#Export as CSV 
+write_csv(sf_dis, "discharge_all_sites.csv")
 
 ```
 
@@ -145,29 +155,38 @@ sf_sed <- continent_joined %>%
 
 ```{r}
 
-#Discharge + SSC Overall
+# Discharge + SSC Overall
 dis_stats <- join_dis |>
   summarise(
     n = n(),
     mean_log_95z = mean(zlog_p95_q, na.rm = TRUE),
     mean_log_meanz = mean(zlog_mean_q, na.rm = TRUE),
-    mean_log_durz = mean(zlog_flood_dur, na.rm = TRUE)
+    mean_log_durz = mean(zlog_flood_dur, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_q, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_q, mu = 0)$p.value,
+    p_log_durz = t.test(zlog_flood_dur, mu = 0)$p.value
   )
 
 ssc_stats <- join_sed |>
   summarise(
     n = n(),
     mean_log_95z = mean(zlog_p95_ssc, na.rm = TRUE),
-    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE))
+    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_ssc, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_ssc, mu = 0)$p.value
+  )
 
-#Summarize Same Way but for Avulsion Types
+# Summarize Same Way but for Avulsion Types
 dis_stats_type <- join_dis |>
   group_by(av_type) |>
   summarise(
     n = n(),
     mean_log_95z = mean(zlog_p95_q, na.rm = TRUE),
     mean_log_meanz = mean(zlog_mean_q, na.rm = TRUE),
-    mean_log_durz = mean(zlog_flood_dur, na.rm = TRUE)
+    mean_log_durz = mean(zlog_flood_dur, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_q, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_q, mu = 0)$p.value,
+    p_log_durz = t.test(zlog_flood_dur, mu = 0)$p.value
   )
 
 ssc_stats_type <- join_sed |>
@@ -175,7 +194,10 @@ ssc_stats_type <- join_sed |>
   summarise(
     n = n(),
     mean_log_95z = mean(zlog_p95_ssc, na.rm = TRUE),
-    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE))
+    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_ssc, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_ssc, mu = 0)$p.value
+  )
 ```
 
 ### Reading in Full Time Series Data
@@ -190,8 +212,102 @@ discharge_ts <- read_csv(here("data", "vg_dis_z_all_years.csv"))
 ### Pulling out 5 Years Prior to Avulsion
 
 ```{r}
-pre_avulsion_5 <- discharge_ts %>%
-  filter(year >= (avulsion_year - 5) & year < avulsion_year)
+#Pull Out 5 Years Prior to Avulsion
+pre_avulsion_5 <- discharge_ts |>
+  filter(year >= (avulsion_year - 5) & year < avulsion_year) |>
+  filter(avulsion_year > 1989)
+
+```
+
+### Conducting Some Proportion Stats
+
+#### Number of Points Above 0 for Each Av Type
+
+```{r}
+#Count Number of Points Above 0 fore Each Avulsion Type 
+pre_av_point_count <- pre_avulsion_5 |>
+  group_by(av_type) %>%
+  summarise(
+    total_count = n(),
+    
+    #Calculating the Counts 
+    zlog_p95_q_above_zero  = sum(zlog_p95_q > 0,  na.rm = TRUE),
+    zlog_mean_q_above_zero = sum(zlog_mean_q > 0, na.rm = TRUE),
+    zlog_flood_dur_above_zero = sum(zlog_flood_dur > 0, na.rm = TRUE)) |>
+  
+  mutate(max_above_prop = zlog_p95_q_above_zero/total_count) |>
+  mutate(mean_above_prop = zlog_mean_q_above_zero/total_count) |>
+  mutate(flood_dur_above_prop = zlog_flood_dur_above_zero/total_count) |>
+  rename(avulsion_type = av_type)
+
+```
+
+#### How Many Sites Have Zscores \> 0 All Five Years
+
+```{r}
+
+#Find How Many Sites Have All ZScores >0
+
+result_sites <- pre_avulsion_5 %>%
+  filter(year < avulsion_year) %>%
+  group_by(av_type, site_name) %>%
+  summarise(
+    total_points = n(),
+    
+    zlog_p95_q_all_above     = all(zlog_p95_q > 0,     na.rm = TRUE),
+    zlog_mean_q_all_above    = all(zlog_mean_q > 0,    na.rm = TRUE),
+    zlog_flood_dur_all_above = all(zlog_flood_dur > 0, na.rm = TRUE),
+    
+    .groups = "drop"
+  ) %>%
+  group_by(av_type) %>%
+  summarise(
+    total_sites = n_distinct(site_name),
+    
+    zlog_p95_q_sites_all_above     = sum(zlog_p95_q_all_above),
+    zlog_mean_q_sites_all_above    = sum(zlog_mean_q_all_above),
+    zlog_flood_dur_sites_all_above = sum(zlog_flood_dur_all_above),
+    
+    zlog_p95_q_prop_all_above     = sum(zlog_p95_q_all_above)     / total_sites,
+    zlog_mean_q_prop_all_above    = sum(zlog_mean_q_all_above)    / total_sites,
+    zlog_flood_dur_prop_all_above = sum(zlog_flood_dur_all_above) / total_sites,
+    
+    .groups = "drop"
+  ) %>%
+  rename(avulsion_type = av_type)
+
+```
+
+#### How Many Sites Have Year Prior to Av \> 2 YP
+
+```{r}
+
+greater_than <- pre_avulsion_5 %>%
+  filter(year %in% c(avulsion_year - 2, avulsion_year - 1)) %>%
+  group_by(av_type, site_name) %>%
+  summarise(
+    zlog_p95_q_yr1_gt_yr2     = zlog_p95_q[year == avulsion_year - 1]     > zlog_p95_q[year == avulsion_year - 2],
+    zlog_mean_q_yr1_gt_yr2    = zlog_mean_q[year == avulsion_year - 1]    > zlog_mean_q[year == avulsion_year - 2],
+    zlog_flood_dur_yr1_gt_yr2 = zlog_flood_dur[year == avulsion_year - 1] > zlog_flood_dur[year == avulsion_year - 2],
+    .groups = "drop"
+  ) %>%
+  group_by(av_type) %>%
+  summarise(
+    total_sites = n_distinct(site_name),
+    
+    zlog_p95_q_count_yr1_gt_yr2     = sum(zlog_p95_q_yr1_gt_yr2,     na.rm = TRUE),
+    zlog_mean_q_count_yr1_gt_yr2    = sum(zlog_mean_q_yr1_gt_yr2,    na.rm = TRUE),
+    zlog_flood_dur_count_yr1_gt_yr2 = sum(zlog_flood_dur_yr1_gt_yr2, na.rm = TRUE),
+    
+    zlog_p95_q_prop_yr1_gt_yr2     = sum(zlog_p95_q_yr1_gt_yr2,     na.rm = TRUE) / total_sites,
+    zlog_mean_q_prop_yr1_gt_yr2    = sum(zlog_mean_q_yr1_gt_yr2,    na.rm = TRUE) / total_sites,
+    zlog_flood_dur_prop_yr1_gt_yr2 = sum(zlog_flood_dur_yr1_gt_yr2, na.rm = TRUE) / total_sites,
+    
+    .groups = "drop"
+  ) %>%
+  rename(avulsion_type = av_type)
+
+print(greater_than)
 
 ```
 
@@ -407,7 +523,370 @@ ggsave(
 )
 
 ```
+## Figure 2 Version 2 
 
+```{r}
+
+# -------------------------
+# Paths
+# -------------------------
+av_year_updated_path <- here("data", "ssc_av_year_z.csv")
+compiled_output_path <- here("data", "time_series.csv")
+av_year_path_dis     <- here("data", "discharge_av_year_z.csv")
+compiled_path_dis    <- here("data", "compiled_dis24.csv")
+plots_dir <- here("plots_svg")
+
+# -------------------------
+# Load SSC data
+# -------------------------
+av_year_ssc  <- read_csv(av_year_updated_path, show_col_types = FALSE)
+compiled_ssc <- read_csv(compiled_output_path, show_col_types = FALSE) %>%
+  mutate(date = as.Date(date))
+
+# -------------------------
+# Load Discharge data
+# -------------------------
+av_year_dis  <- read_csv(av_year_path_dis, show_col_types = FALSE)
+compiled_dis <- read_csv(compiled_path_dis, show_col_types = FALSE) %>%
+  mutate(valid_time = as.POSIXct(valid_time, tz = "UTC"))
+
+# -------------------------
+# SELECT ONE SITE
+# -------------------------
+site <- "MALAWI1.2014"
+
+site_ssc <- compiled_ssc %>% filter(site_name == site) %>% arrange(date)
+site_dis <- compiled_dis %>% filter(site_name == site) %>% arrange(valid_time)
+
+stopifnot(nrow(site_ssc) > 0, nrow(site_dis) > 0)
+
+# Align discharge to Date for dual-axis plot
+site_dis <- site_dis %>%
+  mutate(date = as.Date(valid_time))
+
+# -------------------------
+# Avulsion year
+# -------------------------
+get_avulsion_year <- function(df) {
+  if ("avulsion_start_date" %in% names(df)) {
+    df %>% pull(avulsion_start_date) %>% as.numeric() %>% na.omit() %>% unique()
+  } else {
+    numeric(0)
+  }
+}
+
+avs <- get_avulsion_year(site_ssc)
+
+# -------------------------
+# Shading windows
+# -------------------------
+shade_avulsion  <- NULL
+shade_pre       <- NULL
+
+if (length(avs) > 0) {
+  av_yr <- avs[1]
+
+  # Avulsion window: year-1 through year (slightly darker yellow)
+  shade_avulsion <- tibble(
+    xmin = as.Date(paste0(av_yr - 1, "-01-01")),
+    xmax = as.Date(paste0(av_yr,     "-12-31")),
+    ymin = -Inf, ymax = Inf
+  )
+
+  # Pre-avulsion window: 5 years before through 1 year before (lighter yellow)
+  shade_pre <- tibble(
+    xmin = as.Date(paste0(av_yr - 6, "-01-01")),
+    xmax = as.Date(paste0(av_yr - 2, "-12-31")),
+    ymin = -Inf, ymax = Inf
+  )
+}
+
+# -------------------------
+# p95 lines
+# -------------------------
+year_p95_ssc <- av_year_ssc %>% filter(site_name == site) %>% pull(p95_mean) %>% first()
+year_p95_dis <- av_year_dis %>% filter(site_name == site) %>% pull(p95_mean) %>% first()
+
+# -------------------------
+# p95 points within avulsion window
+# -------------------------
+get_p95_pt_ssc <- function(df, shade) {
+  if (is.null(shade)) return(NULL)
+  w <- df %>% filter(date >= shade$xmin, date <= shade$xmax, !is.na(y_pred))
+  if (nrow(w) == 0) return(NULL)
+  p95_val <- as.numeric(quantile(w$y_pred, 0.95, na.rm = TRUE, type = 7))
+  max_row <- w %>% filter(y_pred == max(y_pred, na.rm = TRUE)) %>% arrange(date) %>% slice(1)
+  tibble(date = max_row$date, y_pred = p95_val)
+}
+
+get_p95_pt_dis <- function(df, shade) {
+  if (is.null(shade)) return(NULL)
+  w <- df %>% filter(date >= shade$xmin, date <= shade$xmax, !is.na(dis24))
+  if (nrow(w) == 0) return(NULL)
+  p95_val <- as.numeric(quantile(w$dis24, 0.95, na.rm = TRUE, type = 7))
+  max_row <- w %>% filter(dis24 == max(dis24, na.rm = TRUE)) %>% arrange(date) %>% slice(1)
+  tibble(date = max_row$date, dis24 = p95_val)
+}
+
+p95_pt_ssc <- get_p95_pt_ssc(site_ssc, shade_avulsion)
+p95_pt_dis <- get_p95_pt_dis(site_dis, shade_avulsion)
+
+# -------------------------
+# Scaling factor for dual y-axis
+# (maps discharge range onto SSC range)
+# -------------------------
+ssc_range <- range(site_ssc$y_pred, na.rm = TRUE)
+dis_range <- range(site_dis$dis24,  na.rm = TRUE)
+
+# linear transform: dis -> ssc space
+# dis_scaled = (dis - dis_min) / (dis_max - dis_min) * (ssc_max - ssc_min) + ssc_min
+scale_dis <- function(x) {
+  (x - dis_range[1]) / diff(dis_range) * diff(ssc_range) + ssc_range[1]
+}
+unscale_dis <- function(x) {
+  (x - ssc_range[1]) / diff(ssc_range) * diff(dis_range) + dis_range[1]
+}
+
+site_dis <- site_dis %>% mutate(dis_scaled = scale_dis(dis24))
+
+# Scale p95 points and lines into SSC space
+p95_pt_dis_scaled <- if (!is.null(p95_pt_dis)) {
+  p95_pt_dis %>% mutate(dis_scaled = scale_dis(dis24))
+} else NULL
+
+year_p95_dis_scaled <- if (!is.na(year_p95_dis)) scale_dis(year_p95_dis) else NA
+
+# -------------------------
+# Shared shading helper
+# -------------------------
+shade_layers <- function() {
+  list(
+    if (!is.null(shade_pre))
+      geom_rect(
+        data = shade_pre,
+        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+        inherit.aes = FALSE,
+        fill  = "#fff7bc",   # back to original lighter yellow
+        alpha = 0.6
+      ),
+    if (!is.null(shade_avulsion))
+      geom_rect(
+        data = shade_avulsion,
+        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+        inherit.aes = FALSE,
+        fill  = "#ffea4d",   # slightly lighter than before
+        alpha = 0.45
+      )
+  )
+}
+
+# -------------------------
+# Shared x scale + theme
+# -------------------------
+shared_x <- scale_x_date(
+  limits = as.Date(c("1983-01-01", "2020-12-31")),
+  breaks = seq(as.Date("1983-01-01"), as.Date("2020-01-01"), by = "5 years"),
+  labels = date_format("%Y"),
+  expand = c(0, 0)
+)
+
+shared_theme <- theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.25, color = "grey90"),
+    axis.title.y       = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x       = element_blank(),
+    axis.line.x        = element_line(color = "grey30", linewidth = 1.2),
+    axis.line.y        = element_line(color = "grey30", linewidth = 1.2),
+    axis.text.x        = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.text.y        = element_text(color = "grey30", size = 16, face = "bold"),
+    axis.ticks.y       = element_line(color = "grey30", linewidth = 1.2),
+    axis.ticks.x       = element_line(color = "grey30", linewidth = 1.2),
+    legend.position    = "none",
+    plot.background    = element_rect(fill = "white", colour = NA)
+  )
+
+# -------------------------
+# Combined SSC + Discharge plot (dual y-axis)
+# -------------------------
+p_combined <- ggplot(site_ssc, aes(x = date, y = y_pred)) +
+
+  shade_layers() +
+  
+  # Discharge line + points (scaled to left axis)
+  geom_line(data  = site_dis, aes(x = date, y = dis_scaled),
+            inherit.aes = FALSE, color = "#2f6fa5", linewidth = 0.75) +
+  geom_point(data = site_dis, aes(x = date, y = dis_scaled),
+             inherit.aes = FALSE, color = "#2f6fa5", size = 0.75) +
+
+  # SSC line + points (left axis)
+  geom_line(color  = "#9bbf30", linewidth = 0.75) +
+  geom_point(color = "#9bbf30", size = 0.75) +
+
+  # Dual y-axis: left = SSC, right = discharge (back-transformed)
+  scale_y_continuous(
+    name   = "Discharge (m³/s)",
+    expand = c(0, 0.05),
+    labels = function(x) round(unscale_dis(x), 0),  # show discharge values on left
+    sec.axis = sec_axis(
+      transform = ~ .,  # SSC already in native units on right
+      name      = "SSC (mg/L)"
+    )
+  ) +
+
+  shared_x +
+
+  labs(x = "Year") +
+
+  shared_theme 
+
+# -------------------------
+# Save combined plot
+# -------------------------
+ggsave(
+  filename = file.path(plots_dir, "fig2_combined_timeseries.png"),
+  plot     = p_combined,
+  width    = 9, height = 3, dpi = 300, bg = "white"
+)
+
+p_combined
+
+```
+
+```{r}
+
+# =========================================================
+# BOTTOM PLOT: Z-score time series (unchanged structure,
+# updated shading windows)
+# =========================================================
+
+malawi_dis_zscores <- read_csv(here("data", "discharge_zscores_one_site.csv"))
+malawi_ssc_zscores <- read_csv(here("data", "ssc_zscores_one_site.csv"))
+
+prep_df <- function(df, label) {
+  df %>%
+    mutate(
+      year       = as.integer(year),
+      zlog_p95_q = as.numeric(zlog_p95_q),
+      dataset    = label,
+      date       = as.Date(paste0(year, "-01-01"))
+    ) %>%
+    filter(!is.na(year), !is.na(zlog_p95_q))
+}
+
+dis_red  <- prep_df(malawi_dis_zscores, "Discharge (m^3/s)")
+ssc_blue <- prep_df(malawi_ssc_zscores, "SSC (mg/L)")
+df_all   <- bind_rows(dis_red, ssc_blue)
+stopifnot(nrow(df_all) > 0)
+
+# ---- Shading windows for z-score plot ----
+# Avulsion year assumed = 2014 (adjust if needed)
+av_yr_z <- 2014L
+
+shade_avulsion_z <- tibble(
+  xmin = as.Date(paste0(av_yr_z - 1, "-01-01")),
+  xmax = as.Date(paste0(av_yr_z,     "-12-31")),
+  ymin = -Inf, ymax = Inf
+)
+
+shade_pre_z <- tibble(
+  xmin = as.Date(paste0(av_yr_z - 6, "-01-01")),
+  xmax = as.Date(paste0(av_yr_z - 2, "-12-31")),
+  ymin = -Inf, ymax = Inf
+)
+
+# ---- Marker points ----
+mark_year_dis <- 2014L
+mark_year_ssc <- 2013L
+
+mark_pts_dis <- df_all %>% filter(dataset == "Discharge (m^3/s)", year == mark_year_dis)
+mark_pts_ssc <- df_all %>% filter(dataset == "SSC (mg/L)",        year == mark_year_ssc)
+
+# ---- Plot ----
+p_z <- ggplot(df_all, aes(x = date, y = zlog_p95_q, color = dataset)) +
+
+  # Pre-avulsion window (lighter yellow)
+  geom_rect(
+    data = shade_pre_z,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    inherit.aes = FALSE,
+    fill  = "#fff7bc",
+    alpha = 0.55
+  ) +
+
+  # Avulsion window (slightly darker yellow)
+  geom_rect(
+    data = shade_avulsion_z,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    inherit.aes = FALSE,
+    fill  = "#ffea4d",
+    alpha = 0.45
+  ) +
+
+  geom_line(linewidth  = 0.9) +
+  geom_point(size = 1.8) +
+
+  { if (nrow(mark_pts_dis) > 0)
+    geom_point(data = mark_pts_dis, aes(x = date, y = zlog_p95_q),
+               inherit.aes = FALSE, shape = 21, size = 5, stroke = 2,
+               fill = NA, color = "red", alpha = 0.8)
+  } +
+
+  { if (nrow(mark_pts_ssc) > 0)
+    geom_point(data = mark_pts_ssc, aes(x = date, y = zlog_p95_q),
+               inherit.aes = FALSE, shape = 21, size = 5, stroke = 2,
+               fill = NA, color = "red", alpha = 0.8)
+  } +
+
+  scale_color_manual(values = c(
+    "Discharge (m^3/s)" = "#2f6fa5",
+    "SSC (mg/L)"        = "#9bbf30"
+  )) +
+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.06))) +
+
+  scale_x_date(
+    limits = c(as.Date("1983-01-01"), as.Date("2020-12-31")),
+    breaks = seq(as.Date("1983-01-01"), as.Date("2020-01-01"), by = "5 years"),
+    labels = date_format("%Y"),
+    expand = c(0, 0)
+  ) +
+
+  labs(x = "Year", y = "Z-Score (-)") +
+
+  shared_theme +
+  theme(
+    axis.title.x     = element_text(size = 20, face = "bold", color = "grey30"),
+    legend.position  = "none",
+    legend.direction = "horizontal",
+    legend.title     = element_blank(),
+    legend.text      = element_text(size = 14, face = "bold", color = "grey30"),
+    legend.background = element_rect(fill = alpha("white", 0.7), colour = NA),
+    legend.key        = element_rect(fill = NA, colour = NA)
+  )
+
+p_z <- p_z +
+  theme(
+    # Match font sizes to combined plot
+    axis.title.y = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.title.x = element_text(color = "grey30", size = 20, face = "bold"),
+    axis.text    = element_text(color = "grey30", size = 16, face = "bold"),
+
+    # Add right-side margin to account for the second y-axis on the combined plot
+    plot.margin = margin(t = 5.5, r = 50, b = 5.5, l = 5.5, unit = "pt")
+  )
+
+# ---- Save ----
+ggsave(
+  filename = file.path(plots_dir, "fig2_log_zscore.png"),
+  plot     = p_z,
+  width    = 9, height = 3.1,dpi = 300, bg = "white"
+)
+
+p_z
+
+```
 ## Figure 2 - Time Series
 
 ### Sediment
@@ -1245,7 +1724,14 @@ plot_data <- pre_avulsion_5 %>%
   summarise(
     mean_zlog_p95_q = mean(zlog_p95_q, na.rm = TRUE),
     se_zlog_p95_q   = sd(zlog_p95_q, na.rm = TRUE) / sqrt(sum(!is.na(zlog_p95_q))),
+    n               = sum(!is.na(zlog_p95_q)),
     .groups = "drop"
+  ) %>%
+  mutate(
+    # 95% CI using t-distribution (more accurate for small n than 1.96)
+    ci_mult  = qt(0.975, df = pmax(n - 1, 1)),
+    ci_lower = mean_zlog_p95_q - ci_mult * se_zlog_p95_q,
+    ci_upper = mean_zlog_p95_q + ci_mult * se_zlog_p95_q
   )
 
 colors <- plasma(4)
@@ -1253,12 +1739,17 @@ shapes <- c(21, 22, 23, 24)
 
 p95_line <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
                       color = av_type, fill = av_type, shape = av_type)) +
-  geom_line(linewidth = 2) +
+
+  # Confidence interval ribbon (very transparent, fill-matched)
+  geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = av_type),
+              color = NA, alpha = 0.12) +
+
+  geom_line(linewidth = 2, alpha = 0.7) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = 1.2) +
   geom_errorbar(aes(ymin = mean_zlog_p95_q - se_zlog_p95_q,
                   ymax = mean_zlog_p95_q + se_zlog_p95_q),
               width = 0.15, linewidth = 0.6, alpha = 0.5) +
-  geom_point(size = 5, stroke = 1, color = "white") +
+  geom_point(size = 5, stroke = 1, color = "white", alpha = 0.7) +
   scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
   scale_color_manual(values = colors) +
   scale_fill_manual(values = colors) +
@@ -1317,12 +1808,12 @@ shapes <- c(21, 22, 23, 24)
 
 mean_line <- ggplot(plot_data1, aes(x = years_before, y = mean_zlog_mean_q,
                       color = av_type, fill = av_type, shape = av_type)) +
-  geom_line(linewidth = 2) +
+  geom_line(linewidth = 2, alpha = 0.7) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = 1.2) +
   geom_errorbar(aes(ymin = mean_zlog_mean_q - se_zlog_mean_q,
                   ymax = mean_zlog_mean_q + se_zlog_mean_q),
               width = 0.15, linewidth = 0.6, alpha = 0.5) +
-  geom_point(size = 5, stroke = 1, color = "white") +
+  geom_point(size = 5, stroke = 1, color = "white", alpha = 0.7) +
   scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
   scale_color_manual(values = colors) +
   scale_fill_manual(values = colors) +
@@ -1382,12 +1873,12 @@ shapes <- c(21, 22, 23, 24)
 
 flooddur_line <- ggplot(plot_data2, aes(x = years_before, y = mean_zlog_flood_dur,
                       color = av_type, fill = av_type, shape = av_type)) +
-  geom_line(linewidth = 2) +
+  geom_line(linewidth = 2, alpha = 0.7                                          ) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = 1.2) +
   geom_errorbar(aes(ymin = mean_zlog_flood_dur - se_zlog_flood_dur,
                   ymax = mean_zlog_flood_dur + se_zlog_flood_dur),
-              width = 0.15, linewidth = 0.6, alpha = 0.5) +
-  geom_point(size = 5, stroke = 1, color = "white") +
+              width = 0.15, linewidth = 0.6, alpha = 0.6) +
+  geom_point(size = 5, stroke = 1, color = "white", alpha = 0.7) +
   scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
   scale_color_manual(values = colors) +
   scale_fill_manual(values = colors) +
@@ -1432,13 +1923,15 @@ ggsave(
 
 ```{r}
 
+plots_dir = here("plots_svg")
+
 library(gridExtra)
 library(grid)
 library(svglite)
 
 legend_source <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
-                                       color = av_type, fill = av_type, shape = av_type)) +
-  geom_point(size = 5) +
+                                       color = av_type, fill = av_type, shape = av_type, alpha = 0.7)) +
+  geom_point(size = 5, alpha = 0.7) +
   scale_color_manual(values = colors) +
   scale_fill_manual(values = colors) +
   scale_shape_manual(values = shapes) +
@@ -1456,25 +1949,23 @@ legend_source <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
 g <- ggplotGrob(legend_source)
 legend_grob <- g$grobs[[which(sapply(g$grobs, function(x) x$name) == "guide-box")]]
 
-# Open device FIRST, then draw, then close
+# Build the grob ONCE
+combined_grob <- arrangeGrob(
+  arrangeGrob(p95_line, mean_line, flooddur_line, ncol = 3),
+  legend_grob,
+  nrow = 2,
+  heights = c(5, 1)
+)
+
+# Save to file
 svglite(file.path(plots_dir, "fig_4_combined.svg"), width = 10, height = 6, bg = "transparent")
 grid.newpage()
-grid.arrange(
-  arrangeGrob(p95_line, mean_line, flooddur_line, ncol = 3),
-  legend_grob,
-  nrow = 2,
-  heights = c(5, 1)
-)
+grid.draw(combined_grob)
 dev.off()
 
-# Separately display in RMarkdown
-grid.arrange(
-  arrangeGrob(p95_line, mean_line, flooddur_line, ncol = 3),
-  legend_grob,
-  nrow = 2,
-  heights = c(5, 1)
-)
-
+# Display in RMarkdown
+grid.newpage()
+grid.draw(combined_grob)
 ```
 
 ## Figure 5 - Avulsion Count
@@ -1561,6 +2052,100 @@ ltype_vals <- setNames(rep("solid", length(all_levels)), all_levels)
 lsize_vals <- setNames(c(rep(0.8, n_sites), 1.6), all_levels)
 color_vals <- setNames(c("#5ec962", "#21918c", "#3b528b", "black"), all_levels)
 
+# Some Scaling Things
+# B/C were designed at width 4.5, base_size 16 — that's your reference "1x"
+scale_factor <- 14 / 4.5   # ≈ 3.11
+
+base_sz <- 16 * scale_factor          # ≈ 49.8 → text
+line_sz <- 1.2 * scale_factor         # ≈ 3.73 → axis lines, ticks
+grid_sz <- 0.2 * scale_factor         # ≈ 0.62 → gridlines
+col_sz  <- 0.2 * scale_factor         # ≈ 0.62 → geom_col white borders
+margin_r <- 8  * scale_factor         # ≈ 24.9
+margin_t <- 4  * scale_factor         # ≈ 12.4
+key_sz  <- 1.5 * scale_factor         # ≈ 4.67 lines
+
+```
+
+### Avulsion Count V2
+
+```{r}
+
+# -------------------------
+# Plot prep
+# -------------------------
+df_stack <- df_plot %>%
+  filter(site_area != "All Sites") %>%
+  mutate(site_area = droplevels(factor(site_area)))
+
+site_levels <- sort(unique(as.character(df_stack$site_area)))
+
+grey_vals <- setNames(
+  grey.colors(length(site_levels), start = 0.75, end = 0.15),
+  site_levels
+)
+
+df_stack <- df_stack %>%
+  mutate(site_area = factor(site_area, levels = site_levels))
+
+# Asterisks above the stacked total again
+df_totals <- df_stack %>%
+  group_by(year) %>%
+  summarise(n = sum(n), .groups = "drop")
+
+poisson_results <- poisson_results %>%
+  select(year, sig_label) %>%
+  left_join(df_totals, by = "year")
+
+# -------------------------
+# Plot
+# -------------------------
+p_av <- ggplot(
+  df_stack,
+  aes(x = year, y = n, fill = site_area, group = site_area)
+) +
+  geom_col(width = 0.8, color = "white", linewidth = col_sz) +
+  scale_fill_manual(values = grey_vals, name = NULL) +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
+  scale_x_continuous(
+    breaks = seq(1984, 2018, by = 4),
+    limits = c(1983, 2019),
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.0, 0.3))) +
+  labs(x = "Year", y = "Avulsion\nCount") +
+  theme_minimal(base_size = base_sz) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = grid_sz, color = "grey90"),
+    axis.title.y  = element_text(face = "bold", color = "grey30", margin = margin(r = margin_r)),
+    axis.title.x  = element_text(face = "bold", color = "grey30", margin = margin(t = margin_t)),
+    axis.text     = element_text(face = "bold", color = "grey30"),
+    axis.line     = element_line(color = "grey30", linewidth = line_sz),
+    axis.ticks    = element_line(color = "grey30", linewidth = line_sz),
+    plot.margin   = margin(t = 6 * scale_factor, r = 10 * scale_factor,
+                            b = 6 * scale_factor, l = 12 * scale_factor),
+    legend.position       = c(0.85, 0.75),
+    legend.justification  = c(1, 1),
+    legend.background     = element_rect(fill = alpha("white", 0.7), color = NA),
+    legend.text           = element_text(color = "grey30", size = base_sz * (15/16), face = "bold"),
+    legend.title          = element_text(color = "grey30", size = base_sz * (15/16), face = "bold"),
+    legend.key.size       = unit(key_sz, "lines"),
+    legend.margin         = margin(2 * scale_factor, 4 * scale_factor, 2 * scale_factor, 4 * scale_factor),
+    plot.background       = element_rect(fill = "white", colour = NA)
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_avulsion_counts_by_site_v2.svg"),
+  plot     = p_av,
+  width    = 14,
+  height   = 5,
+  dpi      = 300,
+  device = svglite,
+  bg       = "white"
+)
+p_av
+
 ```
 
 ### Plotting Avulsion Count
@@ -1584,7 +2169,7 @@ p_av <- ggplot(
   
   geom_line(data = df_plot %>% filter(site_area == "All Sites"),
             aes(x = year, y = n, color = site_area, group = site_area),
-            linewidth = 1.6) +
+            linewidth = 1.6, alpha = 0.5) +
 
   # Mean line
   geom_hline(
@@ -1692,6 +2277,11 @@ alpha_beta <- read.csv(here("data", "nature_alpha_beta.csv")) |>
 # Joining Nature Data Paper to Avulsion Data
 alpha_beta_av <- inner_join(join_dis, alpha_beta, by = c("site_name"))
 
+corr_beta = cor.test(alpha_beta_av$zlog_mean_q, alpha_beta_av$beta)
+print(corr_beta)
+corr_gamma = cor.test(alpha_beta_av$zlog_mean_q, alpha_beta_av$gamma)
+print(corr_gamma)
+
 ```
 
 ```{r}
@@ -1731,7 +2321,7 @@ ggsave(
   width    = 4.5,
   height   = 3,
   dpi      = 300,
-  device = svglite, 
+   
   bg       = "white"
 )
 
@@ -1801,6 +2391,206 @@ ggsave(
   dpi      = 300,
   bg       = "transparent"
 )
+```
+
+## Figure 5 - All in One
+
+```{r}
+
+# =========================================================
+# Figure 5 — GRL-compliant export
+# Target: 170 mm wide, 6 pt text at final size (per AGU/GRL spec)
+# Panel A: full width, 170 x 55 mm
+# Panels B & C: side by side, 82 x 70 mm each (6 mm gutter)
+# =========================================================
+
+library(ggplot2)
+library(dplyr)
+library(svglite)
+
+# ---- helper: mm -> inches for ggsave ----
+mm_to_in <- function(mm) mm / 25.4
+
+# ---- shared GRL theme settings ----
+# NOTE: GRL_BASE_SIZE must stay at 6pt to satisfy the AGU/GRL text-size
+# requirement at final print size. Line widths, point sizes, and gridlines
+# are NOT covered by that rule and can be kept close to original/bold
+# values for visual punch without violating the spec.
+GRL_BASE_SIZE   <- 12      # pt, per AGU/GRL spec -- do not increase
+GRL_LINEWIDTH   <- 1.2    # axis/tick lines -- back to original weight
+GRL_GRIDWIDTH   <- 0.3    # gridlines, slightly lighter than axis lines
+GRL_POINT_SIZE  <- 3      # scatter point size -- back to original
+GRL_SMOOTH_LW   <- 1.5    # trend line width -- back to original
+
+grl_theme <- function(legend = TRUE) {
+  theme_minimal(base_size = GRL_BASE_SIZE) +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor   = element_blank(),
+      panel.grid.major.y = element_line(linetype = "solid", linewidth = GRL_GRIDWIDTH, color = "grey90"),
+      axis.title.y  = element_text(face = "bold", color = "grey30", size = GRL_BASE_SIZE,
+                                    margin = margin(r = 2)),
+      axis.title.x  = element_text(face = "bold", color = "grey30", size = GRL_BASE_SIZE,
+                                    margin = margin(t = 2)),
+      axis.text     = element_text(face = "bold", color = "grey30", size = GRL_BASE_SIZE),
+      axis.line     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.ticks    = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      plot.margin   = margin(t = 1, r = 2, b = 1, l = 2),
+      legend.text   = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      legend.title  = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      legend.key.size = unit(0.6, "lines"),
+      legend.margin   = margin(1, 1, 1, 1),
+      legend.background = element_rect(fill = alpha("white", 0.7), color = NA),
+      plot.background   = element_rect(fill = "white", colour = NA)
+    )
+}
+
+# =========================================================
+# PANEL A — Avulsion counts by site/year (stacked bars)
+# =========================================================
+
+df_stack <- df_plot %>%
+  filter(site_area != "All Sites") %>%
+  mutate(site_area = droplevels(factor(site_area)))
+
+site_levels <- sort(unique(as.character(df_stack$site_area)))
+grey_vals <- setNames(
+  grey.colors(length(site_levels), start = 0.75, end = 0.15),
+  site_levels
+)
+df_stack <- df_stack %>%
+  mutate(site_area = factor(site_area, levels = site_levels))
+
+df_totals <- df_stack %>%
+  group_by(year) %>%
+  summarise(n = sum(n), .groups = "drop")
+
+poisson_results <- poisson_results %>%
+  select(year, sig_label) %>%
+  left_join(df_totals, by = "year")
+
+p_av <- ggplot(
+  df_stack,
+  aes(x = year, y = n, fill = site_area, group = site_area)
+) +
+  geom_col(width = 0.8, color = "white", linewidth = 0.2) +
+  scale_fill_manual(values = grey_vals, name = NULL) +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
+  scale_x_continuous(
+    breaks = seq(1984, 2018, by = 4),
+    limits = c(1983, 2019),
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.0, 0.3))) +
+  labs(x = "Year", y = "Avulsion\nCount") +
+  grl_theme() +
+  theme(
+    legend.position      = c(0.5, 0.85),
+    legend.justification = c(0.5, 1)
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_avulsion_counts_by_site_v2.svg"),
+  plot     = p_av,
+  width    = mm_to_in(170),
+  height   = mm_to_in(70),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+# =========================================================
+# PANELS B & C — Beta / Gamma vs discharge Z-score
+# =========================================================
+
+alpha_beta <- read.csv(here("data", "nature_alpha_beta.csv")) |>
+  clean_names() |>
+  dplyr::select(avulsion_name, geomorphology, gamma, a, b, beta) |>
+  rename(site_name = avulsion_name) |>
+  mutate(site_name = str_replace_all(site_name, "_", "."))
+
+alpha_beta_av <- inner_join(join_dis, alpha_beta, by = c("site_name"))
+
+corr_beta  <- cor.test(alpha_beta_av$zlog_mean_q, alpha_beta_av$beta)
+corr_gamma <- cor.test(alpha_beta_av$zlog_mean_q, alpha_beta_av$gamma)
+print(corr_beta)
+print(corr_gamma)
+
+# ---- Panel B: Beta ----
+beta_dis <- alpha_beta_av |>
+  ggplot(aes(x = zlog_mean_q, y = beta, color = av_type, fill = av_type, shape = av_type)) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = GRL_SMOOTH_LW) +
+  geom_point(size = GRL_POINT_SIZE, stroke = 0.1, color = "white") +
+  labs(
+    x = "Mean Discharge Z (-)",
+    y = "Beta (-)",
+    color = "Avulsion type",
+    fill  = "Avulsion type",
+    shape = "Avulsion type"
+  ) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  grl_theme() +
+  theme(
+    legend.position  = "none",
+    legend.direction = "horizontal"
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_beta.svg"),
+  plot     = beta_dis,
+  width    = mm_to_in(82),
+  height   = mm_to_in(55),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+# ---- Panel C: Gamma ----
+gamma_dis <- alpha_beta_av |>
+  ggplot(aes(x = zlog_mean_q, y = gamma, color = av_type, fill = av_type, shape = av_type)) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = GRL_SMOOTH_LW) +
+  geom_point(size = GRL_POINT_SIZE, stroke = 0.1, color = "white") +
+  labs(
+    x = "Mean Discharge Z (-)",
+    y = "Gamma (-)",
+    color = "Avulsion type",
+    fill  = "Avulsion type",
+    shape = "Avulsion type"
+  ) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  grl_theme() +
+  theme(
+    legend.position  = "none",
+    legend.direction = "horizontal"
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_gamma.svg"),
+  plot     = gamma_dis,
+  width    = mm_to_in(82),
+  height   = mm_to_in(55),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+# =========================================================
+# Notes for Affinity assembly:
+# - Set Affinity document width to 170 mm (or your true final width).
+# - Place each SVG and scale to EXACTLY its native mm size (100%) —
+#   do not stretch/scale further, or the 6pt text will drift off-spec.
+# - Panel A sits full-width on top (170 x 55 mm).
+# - Panels B and C sit side by side below, each 82 x 70 mm,
+#   with ~6 mm gutter between them (82 + 82 + 6 = 170).
+# - For final submission, export the assembled figure from Affinity
+#   as PDF or EPS with fonts outlined/converted to curves (AGU requirement).
+# =========================================================
+
+
 ```
 
 ## Supplemental Figures:

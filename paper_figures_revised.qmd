@@ -1,0 +1,2099 @@
+---
+title: "Templates for All Maps and Graphs + Descriptive Statistics"
+description: "This document is meant to act as the location where all final version graphs are meant to be created, and all descriptive statistics put onto those graphs will be calcualted. This synthesizes material from other documents up to this point. "
+author: "Sam Lance"
+format:
+  html:
+    code-fold: true
+    toc: true
+    number-sections: true
+    embed-resources: true
+    theme: Lux
+editor: visual
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r, include =FALSE}
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(here)
+library(ggplot2)
+library(stringr)
+library(purrr)
+library(maps)
+library(knitr)
+library(kableExtra)
+library(sf)
+library(RColorBrewer)
+library(patchwork)
+library(tmap)
+library(viridis)
+library(sp)
+library(rworldmap)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(scales)
+library(devtools)
+library(janitor)
+library(svglite)
+```
+
+## Reading In + Cleaning Data
+
+### Reading in Data
+
+```{r, output=FALSE}}
+#DISCHARGE
+join_dis <- read_csv(here("data","vg_dis_z.csv")) |>
+  inner_join(
+    read_csv(here("data","base_sites.csv")) |>
+      select(site_name, site_lat, site_lon),
+    by = "site_name") |> #og data missing these parts, need to join
+  mutate(
+    zlog_p95_q  = coalesce(zlog_p95_q, z_p95_q),
+    zlog_mean_q = coalesce(zlog_mean_q, z_mean_q)
+  ) #coalesce falls back to the second option if the first is not available, doing because issue with intermittent flows at 10 sites 
+
+#REMOVED FOR PAPER- Sediment - 100 Sediment Count
+#join_sed = read_csv(here("data","all_site_ssc_z.csv")) |>
+  #drop_na()
+
+#Sediment - 62 Sediment Count 
+join_sed <- read_csv(here("data","ssc_1km.csv")) |>
+  drop_na()
+
+
+
+```
+
+### Count by Type
+
+```{r}
+
+count_by_type <- join_dis |>
+  group_by(av_type) |>
+  summarise(n = n()) |>
+  ungroup() 
+
+count_by_type_ssc <- join_sed |>
+  group_by(av_type) |>
+  summarise(n = n()) |>
+  ungroup()
+
+```
+
+### Cleaning Discharge Data
+
+```{r}
+#Convert DF to SF Object 
+sf_dis <- st_as_sf(join_dis, 
+                           coords = c("site_lon", "site_lat"), #locate long and lat in df
+                           crs = 4326,
+                       remove = FALSE) #setting coordinate reference system WGS84
+
+#Load Data from Natural Earth 
+world <- ne_countries(scale = "medium", returnclass = "sf") |> #turn into SF object 
+  select(name, continent, geometry)   # keep only country name + continent
+
+#Spatial Join
+#Assigning every point a continent based on location
+continent_joined <- st_join(sf_dis, world, join = st_within)
+
+#If nothing within then go with the nearest continent 
+miss_idx <- which(is.na(continent_joined$continent))
+if (length(miss_idx) > 0) {
+  nearest_row_in_world <- st_nearest_feature(continent_joined[miss_idx, ], world)
+  continent_joined$continent[miss_idx] <- world$continent[nearest_row_in_world]
+  continent_joined$name[miss_idx]      <- world$name[nearest_row_in_world]
+}
+
+#Final Renaming and Creating New DF 
+sf_dis <- continent_joined %>%
+  st_drop_geometry() %>%
+  rename(country = name)
+
+#Export as CSV 
+write_csv(sf_dis, "discharge_all_sites.csv")
+
+```
+
+### Cleaning Sediment Data
+
+```{r}
+
+#Convert DF to SF Object 
+sf_sed <- st_as_sf(join_sed, coords = c("site_lon", "site_lat"), crs = 4326,remove = FALSE) #setting  WGS84
+
+#Load Data from Natural Earth 
+world <- ne_countries(scale = "medium", returnclass = "sf") |> #turn into SF object 
+  select(name, continent, geometry)   # keep only country name + continent
+
+#Spatial Join
+#Assigning every point a continent based on location
+continent_joined <- st_join(sf_sed, world, join = st_within)
+
+#If nothing within then go with the nearest continent 
+miss_idx <- which(is.na(continent_joined$continent))
+if (length(miss_idx) > 0) {
+  nearest_row_in_world <- st_nearest_feature(continent_joined[miss_idx, ], world)
+  continent_joined$continent[miss_idx] <- world$continent[nearest_row_in_world]
+  continent_joined$name[miss_idx]      <- world$name[nearest_row_in_world]
+}
+
+#Final Renaming and Creating New DF 
+sf_sed <- continent_joined %>%
+  st_drop_geometry() %>%
+  rename(country = name)
+
+```
+
+### Stats for Paper
+
+```{r}
+
+# Discharge + SSC Overall
+dis_stats <- join_dis |>
+  summarise(
+    n = n(),
+    mean_log_95z = mean(zlog_p95_q, na.rm = TRUE),
+    mean_log_meanz = mean(zlog_mean_q, na.rm = TRUE),
+    mean_log_durz = mean(zlog_flood_dur, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_q, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_q, mu = 0)$p.value,
+    p_log_durz = t.test(zlog_flood_dur, mu = 0)$p.value
+  )
+
+ssc_stats <- join_sed |>
+  summarise(
+    n = n(),
+    mean_log_95z = mean(zlog_p95_ssc, na.rm = TRUE),
+    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_ssc, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_ssc, mu = 0)$p.value
+  )
+
+# Summarize Same Way but for Avulsion Types
+dis_stats_type <- join_dis |>
+  group_by(av_type) |>
+  summarise(
+    n = n(),
+    mean_log_95z = mean(zlog_p95_q, na.rm = TRUE),
+    mean_log_meanz = mean(zlog_mean_q, na.rm = TRUE),
+    mean_log_durz = mean(zlog_flood_dur, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_q, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_q, mu = 0)$p.value,
+    p_log_durz = t.test(zlog_flood_dur, mu = 0)$p.value
+  )
+
+ssc_stats_type <- join_sed |>
+  group_by(av_type) |>
+  summarise(
+    n = n(),
+    mean_log_95z = mean(zlog_p95_ssc, na.rm = TRUE),
+    mean_log_meanz = mean(zlog_mean_ssc, na.rm = TRUE),
+    p_log_95z = t.test(zlog_p95_ssc, mu = 0)$p.value,
+    p_log_meanz = t.test(zlog_mean_ssc, mu = 0)$p.value
+  )
+```
+
+### Reading in Full Time Series Data
+
+```{r}
+
+#Load Discharge Data 
+discharge_ts <- read_csv(here("data", "vg_dis_z_all_years.csv"))
+
+```
+
+### Pulling out 5 Years Prior to Avulsion
+
+```{r}
+#Pull Out 5 Years Prior to Avulsion
+pre_avulsion_5 <- discharge_ts |>
+  filter(year >= (avulsion_year - 5) & year < avulsion_year) |>
+  filter(avulsion_year > 1989)
+
+```
+
+## Figure 1 - World Map with Avulsion Types
+
+### Establishing Colors and Shapes for All Maps
+
+```{r}
+#Loading in World Map Data
+world_map <- ne_countries(scale = "medium", returnclass = "sf")
+
+shapes <- c(
+  "delta"             = 21,
+  "fan"               = 22,
+  "intra-lobe"        = 23,
+  "retrogradational"  = 24
+)
+
+colors <- plasma(4)
+av_type_colors <- setNames(colors, c("delta", "fan", "intra-lobe", "retrogradational"))
+print(av_type_colors)
+combined_colors <- c("All Sites" = "grey50", av_type_colors)
+print(names(combined_colors))
+
+# #devtools::install_github("an-bui/calecopal")# filled shapes
+# colors <- c(
+#   "delta"             = "#0D0887FF",
+#   "fan"               = "#9C179EFF",
+#   "intra-lobe"        = "#F89441FF",
+#   "retrogradational"  = "#F0F921FF"
+# )
+# breaks <- c(-2, -1, 0, 1, 2, 3, 4, 5)
+# colors <- brewer.pal(length(breaks) - 1, "RdYlBu")
+# rev_colors <- rev(colors)  # Reverse the color order
+# shapes <- c(16, 17, 15, 18)  # Different shapes for avulsion types
+
+```
+
+### Robinson Projection World Map
+
+```{r}
+
+# 1) Select sites to highlight
+selected_sites <- sf_dis |>
+  filter(site_name %in% c("B9", "R3.2", "JA.25.India.1990", "MANAMBOLO.2004"))
+
+# 2) Ensure factor levels consistent
+sf_dis <- sf_dis |>
+  mutate(av_type = factor(av_type))
+
+# 3) Named color vector for av_type
+av_type_colors <- setNames(av_type_colors, levels(sf_dis$av_type))
+
+# 4) Robinson CRS
+crs_robin <- "+proj=robin +lon_0=0 +datum=WGS84 +units=m +no_defs"
+
+# 5) Make points sf (critical for correct projection)
+sf_dis_sf <- st_as_sf(
+  sf_dis,
+  coords = c("site_lon", "site_lat"),
+  crs = 4326,
+  remove = FALSE
+)
+
+selected_sites_sf <- st_as_sf(
+  selected_sites,
+  coords = c("site_lon", "site_lat"),
+  crs = 4326,
+  remove = FALSE
+)
+
+# 6) Ensure world_map has CRS (if not already)
+if (is.na(st_crs(world_map))) st_crs(world_map) <- 4326
+
+# 7) Create a "globe" outline and optional graticule
+globe_outline <- st_as_sfc(
+  st_bbox(c(xmin = -180, ymin = -90, xmax = 180, ymax = 90), crs = st_crs(4326))
+) |>
+  st_transform(crs_robin)
+
+# Optional graticule
+grat <- st_graticule(
+  lon = seq(-180, 180, by = 60),
+  lat = seq(-60, 60, by = 30),
+  crs = st_crs(4326)
+) |>
+  st_transform(crs_robin)
+
+# -------------------------
+# NEW: Top + bottom boundary (latitude caps)
+# -------------------------
+lat_min <- -90
+lat_max <- 90
+lon_seq <- seq(-180, 180, by = 0.25)
+
+make_parallel <- function(lat) {
+  st_sfc(
+    st_linestring(cbind(lon_seq, rep(lat, length(lon_seq)))),
+    crs = 4326
+  ) |>
+    st_transform(crs_robin)
+}
+
+bottom_boundary <- make_parallel(lat_min)
+top_boundary    <- make_parallel(lat_max)
+
+# 8) Build plot (Robinson + globe boundary)
+world_map_plot <- ggplot() +
+
+  # Light graticule behind everything (optional; remove if you don’t want lines)
+  geom_sf(data = grat, color = "grey70", linewidth = 0.25) +
+
+  # Continents
+  geom_sf(
+    data = world_map,
+    fill = "grey70",
+    color = "grey60",
+    linewidth = 0.25
+  ) +
+
+  # All sites
+  geom_sf(
+    data = sf_dis_sf,
+    aes(fill = av_type, shape = av_type, color = av_type),
+    size = 3,
+    alpha = 0.8,
+    stroke = 0.5
+  ) +
+
+  # Selected sites: same fill/shape, red outline
+  geom_sf(
+    data = selected_sites_sf,
+    aes(fill = av_type, shape = av_type),
+    size = 3,
+    alpha = 0.8,
+    stroke = 1.0,
+    color = "black",
+    show.legend = FALSE
+  ) +
+
+  # -------------------------
+  # NEW: draw top/bottom boundary lines
+  # -------------------------
+  geom_sf(data = bottom_boundary, color = "grey70", linewidth = 0.7) +
+  geom_sf(data = top_boundary,    color = "grey70", linewidth = 0.7) +
+
+  # Globe outline (draw last so it frames everything)
+  geom_sf(
+    data = globe_outline,
+    fill = NA,
+    color = "grey70",
+    linewidth = 0.7
+  ) +
+
+  # Scales
+  scale_color_manual(name = "Avulsion Type", values = colors) +
+  scale_fill_manual(name = "Avulsion Type", values = colors) +
+  scale_shape_manual(name = "Avulsion Type", values = shapes) +
+
+  # Robinson projection
+  coord_sf(crs = crs_robin, expand = FALSE) +
+
+  # Styling
+  theme_minimal(base_size = 16) +
+  theme(
+    axis.title = element_blank(),
+    axis.text  = element_blank(),
+    axis.ticks = element_blank(),
+
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+
+    plot.background  = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    
+    #legend.position = "none",
+    legend.position = c(0.2, 0.25),
+    legend.direction = "vertical",
+    legend.box = "vertical",
+    legend.title = element_text(face = "bold"),
+    legend.title.align = 0.5,
+    legend.spacing.y = unit(-0.1, "cm"),
+    legend.key.height = unit(0.3, "lines"),
+    legend.background = element_rect(fill = "white", color = "white")
+  ) +
+  guides(
+    fill  = guide_legend(byrow = TRUE),
+    shape = guide_legend(byrow = TRUE)
+  )
+
+world_map_plot
+
+ggsave(
+  filename = here("plots_v3", "fig1_world_robinson_globe.svg"),
+  plot = world_map_plot,
+  width = 10,
+  height = 7,
+  device = svglite, 
+  units = "in",
+  dpi = 300
+)
+
+```
+
+## Figure 2 - Stacked Time Series Plots
+
+```{r}
+
+# =========================================================
+# Figure 2 — Combined SSC + Discharge (Top Panel) — GRL export
+# Self-contained: defines mm_to_in() here so this script doesn't
+# depend on any other file being sourced first.
+# Saves as SVG (not PNG) -- PNG import in Affinity sizes the image
+# from pixel-count-at-document-DPI, which is exactly what caused
+# the oversized-import bug. SVG carries its physical size directly,
+# with no DPI ambiguity.
+# =========================================================
+
+# ---- mm -> inches helper (ggsave wants inches by default) ----
+mm_to_in <- function(mm) mm / 25.4
+
+# -------------------------
+# Paths
+# -------------------------
+av_year_updated_path <- here("data", "betsiboka_ssc_ts.csv")
+compiled_output_path <- here("data", "betsiboka_raw_ssc.csv")
+av_year_path_dis     <- here("data", "betsiboka_dis_ts.csv")
+compiled_path_dis    <- here("data", "betsiboka_raw_dis.csv")
+plots_dir <- here("plots_v3")
+
+# -------------------------
+# Load SSC data
+# -------------------------
+av_year_ssc  <- read_csv(av_year_updated_path, show_col_types = FALSE)
+compiled_ssc <- read_csv(compiled_output_path, show_col_types = FALSE) %>%
+  mutate(date = as.Date(date))
+
+# -------------------------
+# Load Discharge data
+# -------------------------
+av_year_dis  <- read_csv(av_year_path_dis, show_col_types = FALSE)
+compiled_dis <- read_csv(compiled_path_dis, show_col_types = FALSE) %>%
+  mutate(valid_time = as.POSIXct(valid_time, tz = "UTC"))
+
+# -------------------------
+# SELECT ONE SITE
+# -------------------------
+site <- "BETSIBOKA.2004"
+
+site_ssc <- compiled_ssc %>% 
+  filter(site_name == site) %>% 
+  arrange(date)
+
+site_dis <- compiled_dis %>% 
+  filter(site_name == site) %>% 
+  arrange(valid_time)
+
+stopifnot(nrow(site_ssc) > 0, nrow(site_dis) > 0)
+
+site_dis <- site_dis %>%
+  mutate(date = as.Date(valid_time))
+
+# -------------------------
+# Avulsion year
+# -------------------------
+get_avulsion_year <- function(df) {
+  if ("avulsion_start_date" %in% names(df)) {
+    df %>% pull(avulsion_start_date) %>% as.numeric() %>% na.omit() %>% unique()
+  } else {
+    numeric(0)
+  }
+}
+
+avs <- get_avulsion_year(site_ssc)
+
+# -------------------------
+# Shading windows
+# -------------------------
+shade_avulsion  <- NULL
+shade_pre       <- NULL
+
+if (length(avs) > 0) {
+  av_yr <- avs[1]
+
+  shade_avulsion <- tibble(
+    xmin = as.Date(paste0(av_yr - 1, "-01-01")),
+    xmax = as.Date(paste0(av_yr,     "-12-31")),
+    ymin = -Inf, ymax = Inf
+  )
+
+  shade_pre <- tibble(
+    xmin = as.Date(paste0(av_yr - 6, "-01-01")),
+    xmax = as.Date(paste0(av_yr - 2, "-12-31")),
+    ymin = -Inf, ymax = Inf
+  )
+}
+
+# -------------------------
+# p95 points within avulsion window
+# -------------------------
+get_p95_pt_ssc <- function(df, shade) {
+  if (is.null(shade)) return(NULL)
+  w <- df %>% filter(date >= shade$xmin, date <= shade$xmax, !is.na(y_pred))
+  if (nrow(w) == 0) return(NULL)
+  p95_val <- as.numeric(quantile(w$y_pred, 0.95, na.rm = TRUE, type = 7))
+  max_row <- w %>% filter(y_pred == max(y_pred, na.rm = TRUE)) %>% arrange(date) %>% slice(1)
+  tibble(date = max_row$date, y_pred = p95_val)
+}
+
+get_p95_pt_dis <- function(df, shade) {
+  if (is.null(shade)) return(NULL)
+  w <- df %>% filter(date >= shade$xmin, date <= shade$xmax, !is.na(dis24))
+  if (nrow(w) == 0) return(NULL)
+  p95_val <- as.numeric(quantile(w$dis24, 0.95, na.rm = TRUE, type = 7))
+  max_row <- w %>% filter(dis24 == max(dis24, na.rm = TRUE)) %>% arrange(date) %>% slice(1)
+  tibble(date = max_row$date, dis24 = p95_val)
+}
+
+p95_pt_ssc <- get_p95_pt_ssc(site_ssc, shade_avulsion)
+p95_pt_dis <- get_p95_pt_dis(site_dis, shade_avulsion)
+
+# -------------------------
+# Scaling factor for dual y-axis
+# -------------------------
+ssc_range <- range(site_ssc$y_pred, na.rm = TRUE)
+dis_range <- range(site_dis$dis24,  na.rm = TRUE)
+
+scale_dis <- function(x) {
+  (x - dis_range[1]) / diff(dis_range) * diff(ssc_range) + ssc_range[1]
+}
+unscale_dis <- function(x) {
+  (x - ssc_range[1]) / diff(ssc_range) * diff(dis_range) + dis_range[1]
+}
+
+site_dis <- site_dis %>% mutate(dis_scaled = scale_dis(dis24))
+
+# -------------------------
+# Shared shading helper
+# -------------------------
+shade_layers <- function() {
+  list(
+    if (!is.null(shade_pre))
+      geom_rect(
+        data = shade_pre,
+        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+        inherit.aes = FALSE,
+        fill  = "#fff7bc",
+        alpha = 0.6
+      ),
+    if (!is.null(shade_avulsion))
+      geom_rect(
+        data = shade_avulsion,
+        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+        inherit.aes = FALSE,
+        fill  = "#ffea4d",
+        alpha = 0.45
+      )
+  )
+}
+
+# -------------------------
+# Shared x scale + theme (6pt text per GRL spec; original line weights)
+# -------------------------
+GRL_BASE_SIZE <- 10
+GRL_LINEWIDTH <- 1.2
+
+shared_x <- scale_x_date(
+  limits = as.Date(c("1983-01-01", "2020-12-31")),
+  breaks = seq(as.Date("1983-01-01"), as.Date("2020-01-01"), by = "5 years"),
+  labels = date_format("%Y"),
+  expand = c(0, 0)
+)
+
+shared_theme <- theme_minimal(base_size = GRL_BASE_SIZE) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = 0.25, color = "grey90"),
+    axis.title.y       = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    axis.title.x       = element_blank(),
+    axis.line.x        = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    axis.line.y        = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    axis.text.x        = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    axis.text.y        = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    axis.ticks.y       = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    axis.ticks.x       = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    legend.position    = "none",
+    plot.background    = element_rect(fill = "white", colour = NA)
+  )
+
+# -------------------------
+# Combined SSC + Discharge plot (dual y-axis)
+# -------------------------
+p_combined <- ggplot(site_ssc, aes(x = date, y = y_pred)) +
+
+  shade_layers() +
+
+  geom_line(data  = site_dis, aes(x = date, y = dis_scaled),
+            inherit.aes = FALSE, color = "#2f6fa5", linewidth = 0.75) +
+  geom_point(data = site_dis, aes(x = date, y = dis_scaled),
+             inherit.aes = FALSE, color = "#2f6fa5", size = 0.75) +
+
+  geom_line(color  = "#9bbf30", linewidth = 0.75, alpha = 0.7) +
+  geom_point(color = "#9bbf30", size = 0.75, alpha = 0.7) +
+
+  scale_y_continuous(
+    name   = "Discharge (m\u00b3/s)",
+    expand = c(0, 0.05),
+    labels = function(x) round(unscale_dis(x), 0),
+    sec.axis = sec_axis(
+      transform = ~ .,
+      name      = "SSC (mg/L)"
+    )
+  ) +
+
+  shared_x +
+  labs(x = "Year") +
+  shared_theme +
+  theme(
+    plot.margin = margin(t = 1, r = 4, b = 1, l = 1, unit = "mm")
+  )
+
+# -------------------------
+# Save combined plot -- SVG, not PNG, to avoid DPI-based import sizing
+# -------------------------
+ggsave(
+  filename = file.path(plots_dir, "fig2_combined_timeseries_GRL.svg"),
+  plot     = p_combined,
+  width    = mm_to_in(170),
+  height   = mm_to_in(70),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+p_combined
+
+```
+
+```{r}
+
+# =========================================================
+# Figure 2 — Z-score Time Series (Bottom Panel) — GRL export
+# Self-contained: defines mm_to_in() and the GRL theme here so this
+# script doesn't depend on any other file being sourced first.
+# Sized to match the top panel (170 x 45 mm) so the two stack cleanly
+# with aligned x-axes.
+# ========================================================
+
+# ---- mm -> inches helper (ggsave wants inches by default) ----
+mm_to_in <- function(mm) mm / 25.4
+
+# ---- GRL text/line settings (must match the top panel) ----
+GRL_BASE_SIZE <- 10      # pt, per AGU/GRL spec -- do not increase
+GRL_LINEWIDTH <- 1.2    # axis/tick lines -- original weight
+GRL_GRIDWIDTH <- 0.25   # gridlines -- original weight
+
+plots_dir <- here("plots_v3")
+
+# ---- shared theme, redefined here so this script is standalone ----
+shared_theme <- theme_minimal(base_size = GRL_BASE_SIZE) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_line(linetype = "solid", linewidth = GRL_GRIDWIDTH, color = "grey90"),
+    axis.title.y       = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    axis.title.x       = element_blank(),
+    axis.line.x        = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    axis.line.y        = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    axis.text.x        = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    axis.text.y        = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    axis.ticks.y       = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    axis.ticks.x       = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+    legend.position    = "none",
+    plot.background    = element_rect(fill = "white", colour = NA)
+  )
+
+# =========================================================
+# Data prep
+# =========================================================
+
+malawi_dis_zscores <- read_csv(here("data", "betsiboka_dis_ts.csv"))
+malawi_ssc_zscores <- read_csv(here("data", "betsiboka_ssc_ts.csv"))
+
+prep_df <- function(df, label) {
+  df %>%
+    mutate(
+      year       = as.integer(year),
+      zlog_p95_q = as.numeric(zlog_p95_q),
+      dataset    = label,
+      date       = as.Date(paste0(year, "-01-01"))
+    ) %>%
+    filter(!is.na(year), !is.na(zlog_p95_q))
+}
+
+dis_red  <- prep_df(malawi_dis_zscores, "Discharge (m^3/s)")
+ssc_blue <- prep_df(malawi_ssc_zscores, "SSC (mg/L)")
+df_all   <- bind_rows(dis_red, ssc_blue)
+stopifnot(nrow(df_all) > 0)
+
+# ---- Shading windows ----
+av_yr_z <- 2004L
+
+shade_avulsion_z <- tibble(
+  xmin = as.Date(paste0(av_yr_z - 1, "-01-01")),
+  xmax = as.Date(paste0(av_yr_z,     "-12-31")),
+  ymin = -Inf, ymax = Inf
+)
+
+shade_pre_z <- tibble(
+  xmin = as.Date(paste0(av_yr_z - 6, "-01-01")),
+  xmax = as.Date(paste0(av_yr_z - 2, "-12-31")),
+  ymin = -Inf, ymax = Inf
+)
+
+# ---- Marker points ----
+mark_year_dis <- 2004L
+mark_year_ssc <- 2003L
+
+mark_pts_dis <- df_all %>% filter(dataset == "Discharge (m^3/s)", year == mark_year_dis)
+mark_pts_ssc <- df_all %>% filter(dataset == "SSC (mg/L)",        year == mark_year_ssc)
+
+# =========================================================
+# Plot
+# =========================================================
+
+p_z <- ggplot(df_all, aes(x = date, y = zlog_p95_q, color = dataset)) +
+
+  geom_rect(
+    data = shade_pre_z,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    inherit.aes = FALSE,
+    fill  = "#fff7bc",
+    alpha = 0.55
+  ) +
+
+  geom_rect(
+    data = shade_avulsion_z,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    inherit.aes = FALSE,
+    fill  = "#ffea4d",
+    alpha = 0.45
+  ) +
+
+  geom_line(linewidth = 0.9, alpha = 0.7) +
+  geom_point(size = 1.8, alpha = 0.7) +
+  geom_hline(color = "grey30", linewidth = GRL_LINEWIDTH, yintercept = 0, linetype = "dashed") +
+  
+  coord_cartesian(ylim = c(-3, 2)) +
+  
+
+  { if (nrow(mark_pts_dis) > 0)
+    geom_point(data = mark_pts_dis, aes(x = date, y = zlog_p95_q),
+               inherit.aes = FALSE, shape = 21, size = 2.5, stroke = 1,
+               fill = NA, color = "red", alpha = 0.8)
+  } +
+
+  { if (nrow(mark_pts_ssc) > 0)
+    geom_point(data = mark_pts_ssc, aes(x = date, y = zlog_p95_q),
+               inherit.aes = FALSE, shape = 21, size = 2.5, stroke = 1,
+               fill = NA, color = "red", alpha = 0.8)
+  } +
+
+  scale_color_manual(values = c(
+    "Discharge (m^3/s)" = "#2f6fa5",
+    "SSC (mg/L)"        = "#9bbf30"
+  )) +
+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.06))) +
+
+  scale_x_date(
+    limits = c(as.Date("1983-01-01"), as.Date("2020-12-31")),
+    breaks = seq(as.Date("1983-01-01"), as.Date("2020-01-01"), by = "5 years"),
+    labels = date_format("%Y"),
+    expand = c(0, 0)
+  ) +
+
+  labs(x = "Year", y = "Z-Score (-)") +
+
+  shared_theme +
+  theme(
+    # 6pt everywhere, matching the top panel -- no leftover 20/16/14 values
+    axis.title.x      = element_text(size = GRL_BASE_SIZE, face = "bold", color = "grey30"),
+    axis.title.y      = element_text(size = GRL_BASE_SIZE, face = "bold", color = "grey30"),
+    axis.text         = element_text(size = GRL_BASE_SIZE, color = "grey30", face = "bold"),
+    legend.position   = "none",
+    legend.direction  = "horizontal",
+    legend.title      = element_blank(),
+    legend.text       = element_text(size = GRL_BASE_SIZE, face = "bold", color = "grey30"),
+    legend.background = element_rect(fill = scales::alpha("white", 0.7), colour = NA),
+    legend.key        = element_rect(fill = NA, colour = NA),
+    # Same right margin as the top panel, so the two x-axes (Year)
+    # align vertically once stacked in Affinity
+    plot.margin = margin(t = 1, r = 15, b = 1, l = 3, unit = "mm")
+  )
+
+# =========================================================
+# Save -- 170 x 45 mm, matching the top panel exactly
+# =========================================================
+ggsave(
+  filename = file.path(plots_dir, "fig2_z_timeseries_GRL.svg"),
+  plot     = p_z,
+  width    = mm_to_in(170),
+  height   = mm_to_in(70),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+p_z
+
+```
+
+## Figure 3- Boxplots
+
+```{r}
+
+# =========================================================
+# Figure 3 — Boxplots of Discharge/SSC Z-Score — GRL export
+# =========================================================
+.objs_to_clear <- c("make_panel", "grl_theme_classic", "p_p95_q", "p_mean_q",
+                     "p_flood_dur", "ssc_overall", "combined_grob")
+rm(list = Filter(exists, .objs_to_clear))
+rm(.objs_to_clear)
+
+mm_to_in <- function(mm) mm / 25.4
+
+plots_dir <- here("plots_v3")
+
+# =========================================================
+# GRL text/line constants — the ONLY place these are defined
+# =========================================================
+GRL_BASE_SIZE  <- 10      # pt, AGU/GRL spec baseline
+GRL_TITLE_SIZE <- 10      # axis titles
+GRL_XTEXT_SIZE <- 10     # x-axis tick text
+GRL_YTEXT_SIZE <- 10     # y-axis tick text -- explicit override
+GRL_SIG_SIZE   <- 12     # significance stars (pt) -- explicit override
+GRL_LINEWIDTH  <- 1.2    # axis/tick lines
+
+# =========================================================
+# Theme — defined ONCE. Explicit element_text() on every text slot,
+# nothing left to inherit from theme_classic()'s defaults, so there is
+# no rel()-multiplier ambiguity and no possibility of a later +theme()
+# silently winning over this on size alone.
+# =========================================================
+grl_theme_classic <- function() {
+  theme_classic(base_size = GRL_BASE_SIZE) %+replace%
+    theme(
+      axis.title.y     = element_text(color = "grey30", size = GRL_TITLE_SIZE,
+                                       face = "bold", angle = 90, margin = margin(r = 2)),
+      axis.title.x     = element_blank(),
+      axis.line.x      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.line.y      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.text.x      = element_text(color = "grey30", size = GRL_XTEXT_SIZE, face = "bold"),
+      axis.text.y      = element_text(color = "grey30", size = GRL_YTEXT_SIZE, face = "bold"),
+      axis.ticks.y     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.ticks.x     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      legend.position  = "none",
+      plot.background  = element_rect(fill = "white", colour = NA),
+      panel.background = element_rect(fill = "white", colour = NA),
+      plot.margin      = margin(t = 1.5, r = 1.5, b = 1.5, l = 1.5, unit = "mm"))
+}
+
+# ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
+pstar <- function(p) {
+  if (p < 0.001)     "***"
+  else if (p < 0.01) "**"
+  else if (p < 0.05) "*"
+  else               "ns"
+}
+
+# =========================================================
+# Panel Builder
+# =========================================================
+make_panel <- function(data, metric_col, y_label, exclude_types = NULL) {
+
+  if (!is.null(exclude_types)) {
+    data <- data |> filter(!av_type %in% exclude_types)
+  }
+
+  all_sites <- data |> mutate(av_type_plot = "All Sites")
+  by_type   <- data |> mutate(av_type_plot = as.character(av_type))
+
+  remaining_types <- unique(as.character(data$av_type))
+  all_levels <- c("All Sites", intersect(c("delta", "fan", "intra-lobe", "retrogradational"), remaining_types))
+
+  plot_data <- bind_rows(all_sites, by_type) |>
+    mutate(av_type_plot = factor(av_type_plot, levels = all_levels))
+
+  t_all     <- t.test(data[[metric_col]], mu = 0)
+  t_by_type <- lapply(remaining_types, function(typ) {
+    t.test(data |> filter(av_type == typ) |> pull(metric_col), mu = 0)
+  })
+  names(t_by_type) <- remaining_types
+
+  sig_labels <- data.frame(
+    av_type_plot = factor(all_levels, levels = all_levels),
+    label = c(
+      pstar(t_all$p.value),
+      sapply(remaining_types, function(typ) pstar(t_by_type[[typ]]$p.value))
+    )
+  )
+
+  y_positions <- plot_data |>
+    group_by(av_type_plot) |>
+    summarise(y_pos = max(.data[[metric_col]], na.rm = TRUE) + 0.2)
+
+  sig_labels <- sig_labels |> left_join(y_positions, by = "av_type_plot")
+
+  base_colors <- c("delta" = plasma(4)[1], "fan" = plasma(4)[2],
+                   "intra-lobe" = plasma(4)[3], "retrogradational" = plasma(4)[4])
+  combined_colors <- c("All Sites" = "grey40", base_colors[remaining_types])
+
+  p <- ggplot(plot_data, aes(x = av_type_plot, y = .data[[metric_col]],
+                              fill = av_type_plot, color = av_type_plot)) +
+    geom_jitter(width = 0.2, alpha = 0.4, size = 1) +
+    geom_boxplot(show.legend = FALSE, alpha = 0.4,
+                 outlier.shape = NA, color = "grey30", linewidth = 0.7) +
+    stat_summary(fun = mean, geom = "crossbar", width = 0.5,
+                 color = scales::alpha("red", 0.50), linewidth = 0.3) +
+    geom_hline(yintercept = 0, linetype = "dashed",
+               color = "grey30", linewidth = GRL_LINEWIDTH) +
+    geom_vline(xintercept = 1.5, linetype = "dotted",
+               color = "grey50", linewidth = 0.4) +
+    geom_text(data = sig_labels,
+              aes(x = av_type_plot, y = y_pos, label = label),
+              inherit.aes = FALSE, color = "grey30", size = GRL_SIG_SIZE / .pt,
+              fontface = "bold") +
+    scale_fill_manual(values = combined_colors) +
+    scale_color_manual(values = combined_colors) +
+    scale_x_discrete(labels = c(
+      "All Sites"        = "All Sites",
+      "delta"            = "Delta",
+      "fan"              = "Fan",
+      "intra-lobe"       = "Intra-lobe",
+      "retrogradational" = "Retro."
+    )) +
+    labs(y = y_label) +
+    grl_theme_classic()
+
+  # ---- Hard verification: print the actual resolved size ggplot will
+  # use for axis.text.y right before returning, so you can SEE in the
+  # console that 10 is really what's set on this object. ----
+  resolved_y_size <- p$theme$axis.text.y$size
+  message(sprintf("[make_panel] %s -> axis.text.y size = %s (expected %s)",
+                   y_label, resolved_y_size, GRL_YTEXT_SIZE))
+
+  p
+}
+
+# =========================================================
+# Build the 4 panels
+# =========================================================
+p_p95_q     <- make_panel(join_dis, "zlog_p95_q",     "P95 Discharge Z (-)")
+p_mean_q    <- make_panel(join_dis, "zlog_mean_q",    "Mean Discharge Z (-)")
+p_flood_dur <- make_panel(join_dis, "zlog_flood_dur", "Flood Duration Z (-)")
+
+# ── SSC OVERALL PANEL (Peak vs Mean) — built directly, no second theme() ──
+plot_data_ssc <- join_sed |>
+  select(zlog_p95_ssc, zlog_mean_ssc) |>
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value") |>
+  mutate(
+    variable = case_when(
+      variable == "zlog_p95_ssc"  ~ "Peak",
+      variable == "zlog_mean_ssc" ~ "Mean"
+    ),
+    variable = factor(variable, levels = c("Peak", "Mean"))
+  )
+
+t_p95  <- t.test(join_sed$zlog_p95_ssc,  mu = 0)
+t_mean <- t.test(join_sed$zlog_mean_ssc, mu = 0)
+
+y_positions_ssc <- plot_data_ssc |>
+  group_by(variable) |>
+  summarise(y_pos = max(value, na.rm = TRUE) + 0.2)
+
+sig_labels_ssc <- data.frame(
+  variable = factor(c("Peak", "Mean"), levels = c("Peak", "Mean")),
+  label = c(pstar(t_p95$p.value), pstar(t_mean$p.value))
+) |>
+  left_join(y_positions_ssc, by = "variable")
+
+ssc_overall <- plot_data_ssc |>
+  ggplot(aes(x = variable, y = value, fill = variable, color = variable)) +
+  geom_jitter(width = 0.15, alpha = 0.6, size = 1) +
+  geom_boxplot(width = 0.35, alpha = 0.6, outlier.shape = NA,
+               color = "grey30", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             color = "gray30", linewidth = GRL_LINEWIDTH) +
+  stat_summary(fun = mean, geom = "crossbar", width = 0.35,
+               color = scales::alpha("red", 0.50), linewidth = 0.3) +
+  geom_text(data = sig_labels_ssc,
+            aes(x = variable, y = y_pos, label = label),
+            inherit.aes = FALSE, color = "grey30", size = GRL_SIG_SIZE / .pt,
+            fontface = "bold") +
+  scale_fill_manual(values  = c("Peak" = "grey70", "Mean" = "grey40")) +
+  scale_color_manual(values = c("Peak" = "grey70", "Mean" = "grey40")) +
+  labs(x = NULL, y = "SSC Z-Score (-)") +
+  grl_theme_classic() %+replace%
+  theme(axis.title.x = element_text(color = "grey30", size = GRL_TITLE_SIZE, face = "bold"))
+  # ^ axis.title.x only -- does not touch axis.text.y, but using
+  #   %+replace% here too for consistency with the rest of the script.
+
+message(sprintf("[ssc_overall] axis.text.y size = %s (expected %s)",
+                 ssc_overall$theme$axis.text.y$size, GRL_YTEXT_SIZE))
+
+# =========================================================
+# Assemble 2x2 grid and export
+# =========================================================
+combined_grob <- arrangeGrob(
+  p_p95_q, p_mean_q,
+  p_flood_dur, ssc_overall,
+  ncol = 2, nrow = 2
+)
+
+svglite(
+  file.path(plots_dir, "fig3_grid_GRL.svg"),
+  width  = mm_to_in(170),
+  height = mm_to_in(130),
+  bg     = "white"
+)
+grid.newpage()
+grid.draw(combined_grob)
+dev.off()
+
+grid.newpage()
+grid.draw(combined_grob)
+
+```
+
+## Figure 4 - Avulsion Leadup
+
+```{r}
+
+# =========================================================
+# Figure 4 — Leadup to Avulsions — GRL-compliant export
+# Target: 170 mm wide, 6 pt text at final size (per AGU/GRL spec)
+# 3 panels side by side (~55 mm each + gutters), shared bottom legend
+# Line/point weights kept close to original visual weight (not capped by
+# the 6pt rule, which applies to TEXT only).
+# =========================================================
+
+mm_to_in <- function(mm) mm / 25.4
+
+# ---- shared GRL settings ----
+GRL_BASE_SIZE  <- 10      # pt, per AGU/GRL spec -- do not increase
+GRL_LINEWIDTH  <- 1.2    # axis lines/ticks -- original weight
+GRL_LINE_LW    <- 2      # geom_line weight -- original
+GRL_HLINE_LW   <- 1.2    # dashed zero-line -- original
+GRL_ERRBAR_LW  <- 0.6    # error bar weight -- original
+GRL_POINT_SIZE <- 5      # point size -- original
+GRL_POINT_STROKE <- 1    # point stroke -- original
+
+grl_theme_classic <- function() {
+  theme_classic(base_size = GRL_BASE_SIZE) +
+    theme(
+      axis.title.y = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.title.x = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.line.x  = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.line.y  = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.text.x  = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.text.y  = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.ticks.y = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.ticks.x = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      legend.position  = "none",
+      plot.background  = element_rect(fill = "transparent", colour = NA),
+      plot.margin      = margin(2, 2, 2, 2)
+    )
+}
+
+colors <- plasma(4)
+shapes <- c(21, 22, 23, 24)
+
+plots_dir <- here("plots_svg")
+
+# =========================================================
+# Panel 1 — Log P95 Annual Discharge
+# =========================================================
+
+plot_data <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    mean_zlog_p95_q = mean(zlog_p95_q, na.rm = TRUE),
+    se_zlog_p95_q   = sd(zlog_p95_q, na.rm = TRUE) / sqrt(sum(!is.na(zlog_p95_q))),
+    n               = sum(!is.na(zlog_p95_q)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    ci_mult  = qt(0.975, df = pmax(n - 1, 1)),
+    ci_lower = mean_zlog_p95_q - ci_mult * se_zlog_p95_q,
+    ci_upper = mean_zlog_p95_q + ci_mult * se_zlog_p95_q
+  )
+
+p95_line <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
+                                   color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = GRL_LINE_LW, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = GRL_HLINE_LW) +
+  geom_errorbar(aes(ymin = mean_zlog_p95_q - se_zlog_p95_q,
+                     ymax = mean_zlog_p95_q + se_zlog_p95_q),
+                width = 0.15, linewidth = GRL_ERRBAR_LW, alpha = 0.5) +
+  geom_point(size = GRL_POINT_SIZE, stroke = GRL_POINT_STROKE, color = "white", alpha = 0.7) +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.5, 0.5)) +
+  labs(
+    x = "Time to Avulsion (yrs)",
+    y = "Peak Discharge Z (-)",
+    color = "Avulsion Type", fill = "Avulsion Type", shape = "Avulsion Type"
+  ) +
+  grl_theme_classic()
+
+# =========================================================
+# Panel 2 — Log Mean Annual Discharge
+# =========================================================
+
+plot_data1 <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    mean_zlog_mean_q = mean(zlog_mean_q, na.rm = TRUE),
+    se_zlog_mean_q   = sd(zlog_mean_q, na.rm = TRUE) / sqrt(sum(!is.na(zlog_mean_q))),
+    .groups = "drop"
+  )
+
+mean_line <- ggplot(plot_data1, aes(x = years_before, y = mean_zlog_mean_q,
+                                     color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = GRL_LINE_LW, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = GRL_HLINE_LW) +
+  geom_errorbar(aes(ymin = mean_zlog_mean_q - se_zlog_mean_q,
+                     ymax = mean_zlog_mean_q + se_zlog_mean_q),
+                width = 0.15, linewidth = GRL_ERRBAR_LW, alpha = 0.5) +
+  geom_point(size = GRL_POINT_SIZE, stroke = GRL_POINT_STROKE, color = "white", alpha = 0.7) +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.5, 0.5)) +
+  labs(
+    x = "Time to Avulsion (yrs)",
+    y = "Mean Discharge Z (-)",
+    color = "Avulsion Type", fill = "Avulsion Type", shape = "Avulsion Type"
+  ) +
+  grl_theme_classic()
+
+# =========================================================
+# Panel 3 — Log Flood Duration
+# =========================================================
+
+plot_data2 <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    mean_zlog_flood_dur = mean(zlog_flood_dur, na.rm = TRUE),
+    se_zlog_flood_dur   = sd(zlog_flood_dur, na.rm = TRUE) / sqrt(sum(!is.na(zlog_flood_dur))),
+    .groups = "drop"
+  )
+
+flooddur_line <- ggplot(plot_data2, aes(x = years_before, y = mean_zlog_flood_dur,
+                                         color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = GRL_LINE_LW, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = GRL_HLINE_LW) +
+  geom_errorbar(aes(ymin = mean_zlog_flood_dur - se_zlog_flood_dur,
+                     ymax = mean_zlog_flood_dur + se_zlog_flood_dur),
+                width = 0.15, linewidth = GRL_ERRBAR_LW, alpha = 0.6) +
+  geom_point(size = GRL_POINT_SIZE, stroke = GRL_POINT_STROKE, color = "white", alpha = 0.7) +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.5, 0.5)) +
+  labs(
+    x = "Time to Avulsion (yrs)",
+    y = "Flood Duration Z (-)",
+    color = "Avulsion Type", fill = "Avulsion Type", shape = "Avulsion Type"
+  ) +
+  grl_theme_classic()
+
+# =========================================================
+# Shared legend (extracted, centered, bottom row)
+# =========================================================
+
+legend_source <- ggplot(plot_data, aes(x = years_before, y = mean_zlog_p95_q,
+                                        color = av_type, fill = av_type, shape = av_type)) +
+  geom_point(size = GRL_POINT_SIZE, alpha = 0.7) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  guides(color = guide_legend(override.aes = list(size = GRL_POINT_SIZE), nrow = 1)) +
+  labs(color = "Avulsion Type", fill = "Avulsion Type", shape = "Avulsion Type") +
+  theme_classic(base_size = GRL_BASE_SIZE) +
+  theme(
+    legend.position      = "bottom",
+    legend.justification = "center",
+    legend.text          = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    legend.title         = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+    legend.key.size      = unit(0.8, "lines")
+  )
+
+g <- ggplotGrob(legend_source)
+legend_grob <- g$grobs[[which(sapply(g$grobs, function(x) x$name) == "guide-box")]]
+
+# =========================================================
+# Assemble: 3 panels in a row + legend strip below
+# Final size: 170 mm wide x 100 mm tall (panels + legend)
+# =========================================================
+
+combined_grob <- arrangeGrob(
+  arrangeGrob(p95_line, mean_line, flooddur_line, ncol = 3),
+  legend_grob,
+  nrow = 2,
+  heights = c(5, 1)
+)
+
+svglite(
+  file.path(plots_dir, "fig4_combined_GRL.svg"),
+  width  = mm_to_in(170),
+  height = mm_to_in(100),
+  bg     = "transparent"
+)
+grid.newpage()
+grid.draw(combined_grob)
+dev.off()
+
+grid.newpage()
+grid.draw(combined_grob)
+
+# =========================================================
+# Notes for Affinity assembly:
+# - Place this SVG at exactly 170 x 100 mm (100% scale) -- do not resize
+#   further, or the 6pt text drifts off the GRL spec.
+# - Line/point weights were kept at original visual scale on purpose;
+#   only TEXT is constrained to 6pt by the AGU/GRL rule.
+# - For final submission, export the assembled figure from Affinity as
+#   PDF or EPS with fonts outlined/converted to curves (AGU requirement).
+# =========================================================
+
+```
+
+## Figure 5 - All in One
+
+```{r}
+
+# =========================================================
+# Figure 5 — GRL-compliant export
+# Target: 170 mm wide, 6 pt text at final size (per AGU/GRL spec)
+# Panel A: full width, 170 x 55 mm
+# Panels B & C: side by side, 82 x 70 mm each (6 mm gutter)
+# =========================================================
+
+# ---- helper: mm -> inches for ggsave ----
+mm_to_in <- function(mm) mm / 25.4
+
+# ---- shared GRL theme settings ----
+# NOTE: GRL_BASE_SIZE must stay at 6pt to satisfy the AGU/GRL text-size
+# requirement at final print size. Line widths, point sizes, and gridlines
+# are NOT covered by that rule and can be kept close to original/bold
+# values for visual punch without violating the spec.
+GRL_BASE_SIZE   <- 10      # pt, per AGU/GRL spec -- do not increase
+GRL_LINEWIDTH   <- 1.2    # axis/tick lines -- back to original weight
+GRL_GRIDWIDTH   <- 0.3    # gridlines, slightly lighter than axis lines
+GRL_POINT_SIZE  <- 3      # scatter point size -- back to original
+GRL_SMOOTH_LW   <- 1.5    # trend line width -- back to original
+
+grl_theme <- function(legend = TRUE) {
+  theme_minimal(base_size = GRL_BASE_SIZE) +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor   = element_blank(),
+      panel.grid.major.y = element_line(linetype = "solid", linewidth = GRL_GRIDWIDTH, color = "grey90"),
+      axis.title.y  = element_text(face = "bold", color = "grey30", size = GRL_BASE_SIZE,
+                                    margin = margin(r = 2)),
+      axis.title.x  = element_text(face = "bold", color = "grey30", size = GRL_BASE_SIZE,
+                                    margin = margin(t = 2)),
+      axis.text     = element_text(face = "bold", color = "grey30", size = GRL_BASE_SIZE),
+      axis.line     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.ticks    = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      plot.margin   = margin(t = 1, r = 2, b = 1, l = 2),
+      legend.text   = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      legend.title  = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      legend.key.size = unit(0.6, "lines"),
+      legend.margin   = margin(1, 1, 1, 1),
+      legend.background = element_rect(fill = alpha("white", 0.7), color = NA),
+      plot.background   = element_rect(fill = "white", colour = NA)
+    )
+}
+
+# =========================================================
+# PANEL A — Avulsion counts by site/year (stacked bars)
+# =========================================================
+
+
+# -------------------------
+# Prep avulsion counts
+# -------------------------
+avulsion_counts <- join_dis %>%
+  filter(!is.na(avulsion_year), !is.na(site_area)) %>%
+  mutate(year = as.integer(avulsion_year)) %>%
+  filter(site_area %in% c("Himalaya", "Pacific Islands", "South America")) %>%
+  group_by(site_area, year) %>%
+  summarise(n = n(), .groups = "drop")
+
+all_sites <- join_dis %>%
+  filter(!is.na(avulsion_year)) %>%
+  mutate(year = as.integer(avulsion_year)) %>%
+  group_by(year) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(site_area = "All Sites")
+
+# -------------------------
+# Poisson test per year
+# -------------------------
+# Total number of years observed
+n_years  <- nrow(all_sites)
+# Mean annual count = background Poisson rate
+lambda   <- mean(all_sites$n)
+mean_all <- lambda
+
+# Run poisson.test() for each year's count against the background rate
+# T = n_years so the expected value is lambda * 1 (per year)
+poisson_results <- all_sites %>%
+  rowwise() %>%
+  mutate(
+    p_value = poisson.test(n, T = 1, r = lambda)$p.value,
+    sig     = p_value < 0.05,
+    sig_label = case_when(
+      p_value < 0.001 ~ "***",
+      p_value < 0.01  ~ "**",
+      p_value < 0.05  ~ "*",
+      TRUE            ~ ""
+    )
+  ) %>%
+  ungroup() %>%
+  filter(sig)
+
+# ---- Combine for plotting ----
+df_plot <- bind_rows(avulsion_counts, all_sites)
+
+site_areas <- c("South America", "Himalaya", "Pacific Islands")
+all_levels <- c(site_areas, "All Sites")
+df_plot    <- df_plot %>% mutate(site_area = factor(site_area, levels = all_levels))
+
+n_sites <- length(site_areas)
+
+
+df_stack <- df_plot %>%
+  filter(site_area != "All Sites") %>%
+  mutate(site_area = droplevels(factor(site_area)))
+
+site_levels <- sort(unique(as.character(df_stack$site_area)))
+grey_vals <- setNames(
+  grey.colors(length(site_levels), start = 0.75, end = 0.15),
+  site_levels
+)
+df_stack <- df_stack %>%
+  mutate(site_area = factor(site_area, levels = site_levels))
+
+df_totals <- df_stack %>%
+  group_by(year) %>%
+  summarise(n = sum(n), .groups = "drop")
+
+poisson_results <- poisson_results %>%
+  select(year, sig_label) %>%
+  left_join(df_totals, by = "year")
+
+p_av <- ggplot(
+  df_stack,
+  aes(x = year, y = n, fill = site_area, group = site_area)
+) +
+  geom_col(width = 0.8, color = "white", linewidth = 0.2, alpha = 0.7) +
+  scale_fill_manual(values = grey_vals, name = NULL) +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
+  scale_x_continuous(
+    breaks = seq(1984, 2018, by = 4),
+    limits = c(1983, 2019),
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.0, 0.3))) +
+  labs(x = "Year", y = "Avulsion\nCount") +
+  grl_theme() +
+  theme(
+    legend.position      = c(0.5, 0.85),
+    legend.justification = c(0.5, 1)
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_avulsion_counts_by_site_v2.svg"),
+  plot     = p_av,
+  width    = mm_to_in(170),
+  height   = mm_to_in(75),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+# =========================================================
+# PANELS B & C — Beta / Gamma vs discharge Z-score
+# =========================================================
+
+alpha_beta <- read.csv(here("data", "nature_alpha_beta.csv")) |>
+  clean_names() |>
+  dplyr::select(avulsion_name, geomorphology, gamma, a, b, beta) |>
+  rename(site_name = avulsion_name) |>
+  mutate(site_name = str_replace_all(site_name, "_", "."))
+
+alpha_beta_av <- inner_join(join_dis, alpha_beta, by = c("site_name"))
+
+alpha_beta_stats <- alpha_beta_av |>
+  group_by(av_type) |>
+  summarise(n = n()) |>
+  ungroup()
+
+corr_beta  <- cor.test(alpha_beta_av$zlog_mean_q, alpha_beta_av$beta)
+corr_gamma <- cor.test(alpha_beta_av$zlog_mean_q, alpha_beta_av$gamma)
+print(corr_beta)
+print(corr_gamma)
+
+# ---- Panel B: Beta ----
+trend_colors <- scales::alpha(colors, 0.7)   # bake 50% transparency into trend-line colors
+
+beta_dis <- alpha_beta_av |>
+  ggplot(aes(x = zlog_mean_q, y = beta, color = av_type, fill = av_type, shape = av_type)) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = GRL_SMOOTH_LW) +
+  geom_point(size = GRL_POINT_SIZE, stroke = 0.1, color = "white", alpha = 0.7) +
+  labs(
+    x = "Mean Discharge Z (-)",
+    y = "Beta (-)",
+    color = "Avulsion type",
+    fill  = "Avulsion type",
+    shape = "Avulsion type"
+  ) +
+  scale_color_manual(values = trend_colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  grl_theme() +
+  theme(
+    legend.position  = "none",
+    legend.direction = "horizontal"
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_beta.svg"),
+  plot     = beta_dis,
+  width    = mm_to_in(82),
+  height   = mm_to_in(55),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+# ---- Panel C: Gamma ----
+gamma_dis <- alpha_beta_av |>
+  ggplot(aes(x = zlog_mean_q, y = gamma, color = av_type, fill = av_type, shape = av_type)) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = GRL_SMOOTH_LW) +
+  geom_point(size = GRL_POINT_SIZE, stroke = 0.1, color = "white", alpha = 0.7) +
+  labs(
+    x = "Mean Discharge Z (-)",
+    y = "Gamma (-)",
+    color = "Avulsion type",
+    fill  = "Avulsion type",
+    shape = "Avulsion type"
+  ) +
+  scale_color_manual(values = trend_colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  grl_theme() +
+  theme(
+    legend.position  = "none",
+    legend.direction = "horizontal"
+  )
+
+ggsave(
+  filename = file.path(plots_dir, "fig5_gamma.svg"),
+  plot     = gamma_dis,
+  width    = mm_to_in(82),
+  height   = mm_to_in(55),
+  dpi      = 600,
+  device   = svglite,
+  bg       = "white"
+)
+
+```
+
+## Supplemental
+
+### Discharge vs. SSC
+
+```{r}
+
+# =========================================================
+# Discharge vs SSC correlation (Pearson)
+# Joins join_dis (discharge) and join_sed (SSC) by site_name, then
+# correlates the summary z-scores -- one point per avulsion site.
+# =========================================================
+
+library(dplyr)
+library(ggplot2)
+
+# -------------------------
+# Join discharge and SSC summary stats by site
+# -------------------------
+dis_ssc_joined <- inner_join(
+  join_dis %>% select(site_name, av_type, zlog_mean_q, zlog_p95_q),
+  join_sed %>% select(site_name, zlog_mean_ssc, zlog_p95_ssc),
+  by = "site_name"
+)
+
+cat("Sites with both discharge and SSC data:", nrow(dis_ssc_joined), "\n\n")
+
+# -------------------------
+# Pearson correlations
+# -------------------------
+corr_mean <- cor.test(dis_ssc_joined$zlog_mean_q, dis_ssc_joined$zlog_mean_ssc,
+                       method = "pearson")
+
+
+corr_p95  <- cor.test(dis_ssc_joined$zlog_p95_q, dis_ssc_joined$zlog_p95_ssc,
+                       method = "pearson")
+
+
+cat("Mean Discharge Z vs Mean SSC Z:\n")
+print(corr_mean)
+
+cat("\nP95 Discharge Z vs P95 SSC Z:\n")
+print(corr_p95)
+
+# -------------------------
+# Scatter plot: Mean Discharge Z vs Mean SSC Z
+# -------------------------
+r_label <- sprintf("r = %.2f, p = %.3g", corr_mean$estimate, corr_mean$p.value)
+
+p_corr <- ggplot(dis_ssc_joined, aes(x = zlog_mean_q, y = zlog_mean_ssc)) +
+  geom_point(size = 3, alpha = 0.6, color = "#2f6fa5") +
+  geom_smooth(method = "lm", se = TRUE, color = "#9bbf30", fill = "#9bbf30", alpha = 0.15) +
+  annotate("text", x = -Inf, y = Inf, label = r_label,
+           hjust = -0.1, vjust = 1.5, size = 5, fontface = "bold", color = "grey30") +
+  labs(
+    x = "Mean Discharge Z (-)",
+    y = "Mean SSC Z (-)"
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.title = element_text(color = "grey30", face = "bold"),
+    axis.text  = element_text(color = "grey30", face = "bold")
+  )
+
+p_corr
+
+```
+
+## Getting Freaky 
+
+### Leadup Mean Only 
+
+```{r}
+# =========================================================
+# Figure 4 — Leadup to Avulsions, Mean Discharge only — GRL export
+# Single panel (was 3-panel + shared legend). Adds per-(av_type,
+# years_before) t-tests against 0, with significance stars colored
+# to match each av_type's line color, positioned above/below the
+# error bar depending on the sign of the mean. No legend.
+# =========================================================
+
+library(ggplot2)
+library(dplyr)
+library(svglite)
+
+mm_to_in <- function(mm) mm / 25.4
+
+# ---- shared GRL settings ----
+GRL_BASE_SIZE    <- 10     # pt
+GRL_LINEWIDTH    <- 1.2    # axis lines/ticks
+GRL_LINE_LW      <- 2      # geom_line weight
+GRL_HLINE_LW     <- 1.2    # dashed zero-line
+GRL_ERRBAR_LW    <- 0.6    # error bar weight
+GRL_POINT_SIZE   <- 5      # point size
+GRL_POINT_STROKE <- 1      # point stroke
+GRL_SIG_SIZE     <- 14     # significance star size (pt)
+SIG_GAP          <- 0.04   # vertical gap between error bar tip and star
+
+grl_theme_classic <- function() {
+  theme_classic(base_size = GRL_BASE_SIZE) +
+    theme(
+      axis.title.y     = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.title.x     = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.line.x      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.line.y      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.text.x      = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.text.y      = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.ticks.y     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.ticks.x     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      legend.position  = "none",   # legend removed
+      plot.background  = element_rect(fill = "transparent", colour = NA),
+      plot.margin      = margin(4, 4, 4, 4, unit = "mm")
+    )
+}
+
+colors <- plasma(4)
+shapes <- c(21, 22, 23, 24)
+
+plots_dir <- here("plots_svg")
+
+# ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
+# Vectorized version: case_when() evaluates element-wise across a whole
+# column, unlike a plain if/else function (which only accepts a single
+# scalar and errors with "condition has length > 1" when handed a vector
+# inside mutate()/ifelse()).
+pstar_vec <- function(p) {
+  dplyr::case_when(
+    is.na(p)     ~ "",
+    p < 0.001    ~ "***",
+    p < 0.01     ~ "**",
+    p < 0.05     ~ "*",
+    TRUE         ~ "ns"
+  )
+}
+
+# =========================================================
+# Mean Annual Discharge — summary stats + t-tests per group
+# =========================================================
+
+plot_data1 <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    mean_zlog_mean_q = mean(zlog_mean_q, na.rm = TRUE),
+    se_zlog_mean_q   = sd(zlog_mean_q, na.rm = TRUE) / sqrt(sum(!is.na(zlog_mean_q))),
+    n                = sum(!is.na(zlog_mean_q)),
+    .groups = "drop"
+  )
+
+# One-sample t-test (mean vs 0) for every av_type x years_before group.
+# Pulls the raw values for each group from pre_avulsion_5 directly so
+# the test uses the actual underlying data, not just the summary stats.
+sig_data <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    p_value = {
+      vals <- zlog_mean_q[!is.na(zlog_mean_q)]
+      if (length(vals) >= 2) t.test(vals, mu = 0)$p.value else NA_real_
+    },
+    .groups = "drop"
+  ) %>%
+  mutate(sig_label = pstar_vec(p_value)) %>%
+  # drop "ns" so the panel only shows stars for actual significance,
+  # not a label on every single point -- remove this filter if you'd
+  # rather see "ns" marked explicitly too
+  filter(sig_label != "" & sig_label != "ns") %>%
+  left_join(plot_data1, by = c("av_type", "years_before")) %>%
+  mutate(
+    # place the star just above the upper error-bar tip when the mean
+    # is positive, or just below the lower error-bar tip when negative,
+    # so it never overlaps the point/error bar
+    star_y = ifelse(
+      mean_zlog_mean_q >= 0,
+      mean_zlog_mean_q + se_zlog_mean_q + SIG_GAP,
+      mean_zlog_mean_q - se_zlog_mean_q - SIG_GAP
+    )
+  )
+
+# =========================================================
+# Plot
+# =========================================================
+
+mean_line <- ggplot(plot_data1, aes(x = years_before, y = mean_zlog_mean_q,
+                                     color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = GRL_LINE_LW, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = GRL_HLINE_LW) +
+  geom_errorbar(aes(ymin = mean_zlog_mean_q - se_zlog_mean_q,
+                     ymax = mean_zlog_mean_q + se_zlog_mean_q),
+                width = 0.15, linewidth = GRL_ERRBAR_LW, alpha = 0.5) +
+  geom_point(size = GRL_POINT_SIZE, stroke = GRL_POINT_STROKE, color = "white", alpha = 0.7) +
+  # significance stars -- colored per av_type to match that line,
+  # using the same discrete color scale rather than a fixed color
+  geom_text(
+    data = sig_data,
+    aes(x = years_before, y = star_y, label = sig_label, color = av_type),
+    inherit.aes = FALSE, size = GRL_SIG_SIZE / .pt, fontface = "bold",
+    show.legend = FALSE
+  ) +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.5, 0.5)) +
+  labs(
+    x = "Time to Avulsion (yrs)",
+    y = "Mean Discharge Z (-)"
+  ) +
+  grl_theme_classic()
+
+# =========================================================
+# Save — single panel, 170 x 60 mm (no legend strip needed)
+# =========================================================
+svglite(
+  file.path(plots_dir, "fig4_mean_discharge_GRL.svg"),
+  width  = mm_to_in(170),
+  height = mm_to_in(60),
+  bg     = "transparent"
+)
+print(mean_line)
+dev.off()
+
+mean_line
+
+# =========================================================
+# Notes:
+# - This single-panel figure replaces the old 3-panel + legend layout.
+# - Significance stars use a one-sample t-test (mean vs 0) for each
+#   av_type at each years_before value, using the raw underlying data
+#   (not just the summary mean/SE), and are colored via the same
+#   discrete `colors` scale as the lines/points so they visually match
+#   each avulsion type.
+# - "ns" results are filtered out so only significant points (p < 0.05)
+#   get a star. Remove the `filter(sig_label != "ns")` line above if
+#   you want "ns" explicitly labeled on non-significant points too.
+# - Star placement: above the error bar when the mean is positive,
+#   below it when negative, so stars never overlap the data.
+# - No legend (legend.position = "none" in the theme, and the star
+#   geom_text layer also has show.legend = FALSE as a safeguard).
+# - Place the exported .svg at exactly 170 x 60 mm in Affinity (100%
+#   scale); check the W field and switch units to mm if showing px.
+# =========================================================
+
+```
+
+### Leadup P95 Only
+
+```{r}
+# =========================================================
+# Figure 4 — Leadup to Avulsions, P95 Discharge only — GRL export
+# Mirrors the Mean Discharge version: single panel, per-(av_type,
+# years_before) t-tests against 0, significance stars colored to
+# match each av_type's line color, positioned above/below the
+# error bar depending on the sign of the mean. No legend.
+# =========================================================
+
+library(ggplot2)
+library(dplyr)
+library(svglite)
+
+mm_to_in <- function(mm) mm / 25.4
+
+# ---- shared GRL settings ----
+GRL_BASE_SIZE    <- 10     # pt
+GRL_LINEWIDTH    <- 1.2    # axis lines/ticks
+GRL_LINE_LW      <- 2      # geom_line weight
+GRL_HLINE_LW     <- 1.2    # dashed zero-line
+GRL_ERRBAR_LW    <- 0.6    # error bar weight
+GRL_POINT_SIZE   <- 5      # point size
+GRL_POINT_STROKE <- 1      # point stroke
+GRL_SIG_SIZE     <- 14     # significance star size (pt)
+SIG_GAP          <- 0.04   # vertical gap between error bar tip and star
+
+grl_theme_classic <- function() {
+  theme_classic(base_size = GRL_BASE_SIZE) +
+    theme(
+      axis.title.y     = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.title.x     = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.line.x      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.line.y      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.text.x      = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.text.y      = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.ticks.y     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.ticks.x     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      legend.position  = "none",   # legend removed
+      plot.background  = element_rect(fill = "transparent", colour = NA),
+      plot.margin      = margin(4, 4, 4, 4, unit = "mm")
+    )
+}
+
+colors <- plasma(4)
+shapes <- c(21, 22, 23, 24)
+
+plots_dir <- here("plots_svg")
+
+# ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
+# Vectorized version: case_when() evaluates element-wise across a whole
+# column, unlike a plain if/else function (which only accepts a single
+# scalar and errors with "condition has length > 1" when handed a vector
+# inside mutate()/ifelse()).
+pstar_vec <- function(p) {
+  dplyr::case_when(
+    is.na(p)     ~ "",
+    p < 0.001    ~ "***",
+    p < 0.01     ~ "**",
+    p < 0.05     ~ "*",
+    TRUE         ~ "ns"
+  )
+}
+
+# =========================================================
+# P95 Annual Discharge — summary stats + t-tests per group
+# =========================================================
+
+plot_data_p95 <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    mean_zlog_p95_q = mean(zlog_p95_q, na.rm = TRUE),
+    se_zlog_p95_q   = sd(zlog_p95_q, na.rm = TRUE) / sqrt(sum(!is.na(zlog_p95_q))),
+    n               = sum(!is.na(zlog_p95_q)),
+    .groups = "drop"
+  )
+
+# One-sample t-test (mean vs 0) for every av_type x years_before group.
+# Pulls the raw values for each group from pre_avulsion_5 directly so
+# the test uses the actual underlying data, not just the summary stats.
+sig_data_p95 <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    p_value = {
+      vals <- zlog_p95_q[!is.na(zlog_p95_q)]
+      if (length(vals) >= 2) t.test(vals, mu = 0)$p.value else NA_real_
+    },
+    .groups = "drop"
+  ) %>%
+  mutate(sig_label = pstar_vec(p_value)) %>%
+  # drop "ns" so the panel only shows stars for actual significance,
+  # not a label on every single point -- remove this filter if you'd
+  # rather see "ns" marked explicitly too
+  filter(sig_label != "" & sig_label != "ns") %>%
+  left_join(plot_data_p95, by = c("av_type", "years_before")) %>%
+  mutate(
+    # place the star just above the upper error-bar tip when the mean
+    # is positive, or just below the lower error-bar tip when negative,
+    # so it never overlaps the point/error bar
+    star_y = ifelse(
+      mean_zlog_p95_q >= 0,
+      mean_zlog_p95_q + se_zlog_p95_q + SIG_GAP,
+      mean_zlog_p95_q - se_zlog_p95_q - SIG_GAP
+    )
+  )
+
+# =========================================================
+# Plot
+# =========================================================
+
+p95_line <- ggplot(plot_data_p95, aes(x = years_before, y = mean_zlog_p95_q,
+                                       color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = GRL_LINE_LW, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = GRL_HLINE_LW) +
+  geom_errorbar(aes(ymin = mean_zlog_p95_q - se_zlog_p95_q,
+                     ymax = mean_zlog_p95_q + se_zlog_p95_q),
+                width = 0.15, linewidth = GRL_ERRBAR_LW, alpha = 0.5) +
+  geom_point(size = GRL_POINT_SIZE, stroke = GRL_POINT_STROKE, color = "white", alpha = 0.7) +
+  # significance stars -- colored per av_type to match that line,
+  # using the same discrete color scale rather than a fixed color
+  geom_text(
+    data = sig_data_p95,
+    aes(x = years_before, y = star_y, label = sig_label, color = av_type),
+    inherit.aes = FALSE, size = GRL_SIG_SIZE / .pt, fontface = "bold",
+    show.legend = FALSE
+  ) +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.5, 0.5)) +
+  labs(
+    x = "Time to Avulsion (yrs)",
+    y = "P95 Discharge Z (-)"
+  ) +
+  grl_theme_classic()
+
+# =========================================================
+# Save — single panel, 170 x 60 mm (no legend strip needed)
+# =========================================================
+svglite(
+  file.path(plots_dir, "fig4_p95_discharge_GRL.svg"),
+  width  = mm_to_in(170),
+  height = mm_to_in(60),
+  bg     = "transparent"
+)
+print(p95_line)
+dev.off()
+
+p95_line
+
+# =========================================================
+# Notes:
+# - Same structure as the Mean Discharge version, swapped to
+#   zlog_p95_q throughout (data, summary stats, t-tests, axis label,
+#   output filename).
+# - Significance stars use a one-sample t-test (mean vs 0) for each
+#   av_type at each years_before value, using the raw underlying data
+#   (not just the summary mean/SE), and are colored via the same
+#   discrete `colors` scale as the lines/points so they visually match
+#   each avulsion type.
+# - "ns" results are filtered out so only significant points (p < 0.05)
+#   get a star. Remove the `filter(sig_label != "ns")` line above if
+#   you want "ns" explicitly labeled on non-significant points too.
+# - Star placement: above the error bar when the mean is positive,
+#   below it when negative, so stars never overlap the data.
+# - No legend (legend.position = "none" in the theme, and the star
+#   geom_text layer also has show.legend = FALSE as a safeguard).
+# - Place the exported .svg at exactly 170 x 60 mm in Affinity (100%
+#   scale); check the W field and switch units to mm if showing px.
+# =========================================================
+```
+
+### Leadup Flood Dur Only
+
+```{r}
+# =========================================================
+# Figure 4 — Leadup to Avulsions, Flood Duration only — GRL export
+# Mirrors the Mean/P95 Discharge versions: single panel, per-(av_type,
+# years_before) t-tests against 0, significance stars colored to
+# match each av_type's line color, positioned above/below the
+# error bar depending on the sign of the mean. No legend.
+# =========================================================
+
+library(ggplot2)
+library(dplyr)
+library(svglite)
+
+mm_to_in <- function(mm) mm / 25.4
+
+# ---- shared GRL settings ----
+GRL_BASE_SIZE    <- 10     # pt
+GRL_LINEWIDTH    <- 1.2    # axis lines/ticks
+GRL_LINE_LW      <- 2      # geom_line weight
+GRL_HLINE_LW     <- 1.2    # dashed zero-line
+GRL_ERRBAR_LW    <- 0.6    # error bar weight
+GRL_POINT_SIZE   <- 5      # point size
+GRL_POINT_STROKE <- 1      # point stroke
+GRL_SIG_SIZE     <- 14     # significance star size (pt)
+SIG_GAP          <- 0.04   # vertical gap between error bar tip and star
+
+grl_theme_classic <- function() {
+  theme_classic(base_size = GRL_BASE_SIZE) +
+    theme(
+      axis.title.y     = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.title.x     = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.line.x      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.line.y      = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.text.x      = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.text.y      = element_text(color = "grey30", size = GRL_BASE_SIZE, face = "bold"),
+      axis.ticks.y     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      axis.ticks.x     = element_line(color = "grey30", linewidth = GRL_LINEWIDTH),
+      legend.position  = "none",   # legend removed
+      plot.background  = element_rect(fill = "transparent", colour = NA),
+      plot.margin      = margin(4, 4, 4, 4, unit = "mm")
+    )
+}
+
+colors <- plasma(4)
+shapes <- c(21, 22, 23, 24)
+
+plots_dir <- here("plots_svg")
+
+# ── SIGNIFICANCE HELPER ───────────────────────────────────────────────────
+# Vectorized version: case_when() evaluates element-wise across a whole
+# column, unlike a plain if/else function (which only accepts a single
+# scalar and errors with "condition has length > 1" when handed a vector
+# inside mutate()/ifelse()).
+pstar_vec <- function(p) {
+  dplyr::case_when(
+    is.na(p)     ~ "",
+    p < 0.001    ~ "***",
+    p < 0.01     ~ "**",
+    p < 0.05     ~ "*",
+    TRUE         ~ "ns"
+  )
+}
+
+# =========================================================
+# Flood Duration — summary stats + t-tests per group
+# =========================================================
+
+plot_data_flood <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    mean_zlog_flood_dur = mean(zlog_flood_dur, na.rm = TRUE),
+    se_zlog_flood_dur   = sd(zlog_flood_dur, na.rm = TRUE) / sqrt(sum(!is.na(zlog_flood_dur))),
+    n                   = sum(!is.na(zlog_flood_dur)),
+    .groups = "drop"
+  )
+
+# One-sample t-test (mean vs 0) for every av_type x years_before group.
+# Pulls the raw values for each group from pre_avulsion_5 directly so
+# the test uses the actual underlying data, not just the summary stats.
+sig_data_flood <- pre_avulsion_5 %>%
+  mutate(years_before = avulsion_year - year) %>%
+  group_by(av_type, years_before) %>%
+  summarise(
+    p_value = {
+      vals <- zlog_flood_dur[!is.na(zlog_flood_dur)]
+      if (length(vals) >= 2) t.test(vals, mu = 0)$p.value else NA_real_
+    },
+    .groups = "drop"
+  ) %>%
+  mutate(sig_label = pstar_vec(p_value)) %>%
+  # drop "ns" so the panel only shows stars for actual significance,
+  # not a label on every single point -- remove this filter if you'd
+  # rather see "ns" marked explicitly too
+  filter(sig_label != "" & sig_label != "ns") %>%
+  left_join(plot_data_flood, by = c("av_type", "years_before")) %>%
+  mutate(
+    # place the star just above the upper error-bar tip when the mean
+    # is positive, or just below the lower error-bar tip when negative,
+    # so it never overlaps the point/error bar
+    star_y = ifelse(
+      mean_zlog_flood_dur >= 0,
+      mean_zlog_flood_dur + se_zlog_flood_dur + SIG_GAP,
+      mean_zlog_flood_dur - se_zlog_flood_dur - SIG_GAP
+    )
+  )
+
+# =========================================================
+# Plot
+# =========================================================
+
+flooddur_line <- ggplot(plot_data_flood, aes(x = years_before, y = mean_zlog_flood_dur,
+                                              color = av_type, fill = av_type, shape = av_type)) +
+  geom_line(linewidth = GRL_LINE_LW, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey30", linewidth = GRL_HLINE_LW) +
+  geom_errorbar(aes(ymin = mean_zlog_flood_dur - se_zlog_flood_dur,
+                     ymax = mean_zlog_flood_dur + se_zlog_flood_dur),
+                width = 0.15, linewidth = GRL_ERRBAR_LW, alpha = 0.6) +
+  geom_point(size = GRL_POINT_SIZE, stroke = GRL_POINT_STROKE, color = "white", alpha = 0.7) +
+  # significance stars -- colored per av_type to match that line,
+  # using the same discrete color scale rather than a fixed color
+  geom_text(
+    data = sig_data_flood,
+    aes(x = years_before, y = star_y, label = sig_label, color = av_type),
+    inherit.aes = FALSE, size = GRL_SIG_SIZE / .pt, fontface = "bold",
+    show.legend = FALSE
+  ) +
+  scale_x_reverse(breaks = 1:5, labels = paste0(-1:-5)) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  coord_cartesian(ylim = c(-0.5, 0.5)) +
+  labs(
+    x = "Time to Avulsion (yrs)",
+    y = "Flood Duration Z (-)"
+  ) +
+  grl_theme_classic()
+
+# =========================================================
+# Save — single panel, 170 x 60 mm (no legend strip needed)
+# =========================================================
+svglite(
+  file.path(plots_dir, "fig4_flood_duration_GRL.svg"),
+  width  = mm_to_in(170),
+  height = mm_to_in(60),
+  bg     = "transparent"
+)
+print(flooddur_line)
+dev.off()
+
+flooddur_line
+
+# =========================================================
+# Notes:
+# - Same structure as the Mean/P95 Discharge versions, swapped to
+#   zlog_flood_dur throughout (data, summary stats, t-tests, axis
+#   label, output filename).
+# - Significance stars use a one-sample t-test (mean vs 0) for each
+#   av_type at each years_before value, using the raw underlying data
+#   (not just the summary mean/SE), and are colored via the same
+#   discrete `colors` scale as the lines/points so they visually match
+#   each avulsion type.
+# - "ns" results are filtered out so only significant points (p < 0.05)
+#   get a star. Remove the `filter(sig_label != "ns")` line above if
+#   you want "ns" explicitly labeled on non-significant points too.
+# - Star placement: above the error bar when the mean is positive,
+#   below it when negative, so stars never overlap the data.
+# - No legend (legend.position = "none" in the theme, and the star
+#   geom_text layer also has show.legend = FALSE as a safeguard).
+# - Place the exported .svg at exactly 170 x 60 mm in Affinity (100%
+#   scale); check the W field and switch units to mm if showing px.
+# =========================================================
+```
